@@ -1,0 +1,49 @@
+name: Android Build
+on:
+  push:
+  pull_request:
+    branches: [ "main "]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Project Checkout
+        uses: actions/checkout@v4
+
+      - name: Java JDK setup
+        uses: actions/setup-java@v5
+        width:
+          java-version: '17'
+          distribution: 'termuin'
+          cache: 'gradle'
+
+      - name: Grant execute permissions
+        run: chmod +x gradlew
+
+      - name: Gradle Build
+        run: ./gradlew assembleDebug
+
+      - name: Build release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: debug-${{ github.run_number }}-${{ github.sha }}
+          name: Debug Build
+          files: app/build/outputs/apk/debug/*.apk
+          prerelease: true
+
+      - name: Upload APK as an artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Clean up debug builds
+        uses: dev-drprasad/delete-older-releases@v0.3.3
+        with:
+          keep-latest: 10
+          delete_tags: true
+          delete_tag_pattern: 'debug-'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
