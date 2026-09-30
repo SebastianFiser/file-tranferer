@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "org.dpdns.sebastianfiser.filetransferer"
-    compileSdk = 34
+    compileSdk = 37
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
