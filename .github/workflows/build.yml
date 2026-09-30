@@ -47,7 +47,7 @@ jobs:
       - name: Clean up debug builds
         uses: dev-drprasad/delete-older-releases@v0.3.3
         with:
-          keep-latest: 10
+          keep_latest: 10
           delete_tags: true
           delete_tag_pattern: 'debug-'
         env:
