@@ -1,3 +1,23 @@
+hello handshake
+  -device
+  {
+    "id":"0"
+    "type": "hello"
+    "data": {
+      "device_name": "",
+      "protocol_version": 0
+    }
+  }
+  -server
+  {
+    "id" : "0",
+    "type": "hello_ack",
+    "data": {
+      "server_name": "",
+      "protocol_version": 0
+    }
+  }
+
 file listing command
   json meesage sketch-
     {
