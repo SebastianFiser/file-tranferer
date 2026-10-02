@@ -59,33 +59,41 @@ public class TransferServer
                         PropertyNameCaseInsensitive = true,
                         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                     };
-                    var msg = JsonSerializer.Deserialize<Message>(text, options);
+                    Message? msg;
+                    try
+                    {
+                        msg = JsonSerializer.Deserialize<Message>(text, options);
+                    }
+                    catch (JsonException)
+                    {
+                        await SendAsync(ws, MakeError("0", "invalid_message", "Not a valid Json"), options);
+                        continue;
+                    }
                     if (msg is null)
                     {
-                        Console.WriteLine("Invalid message");
+                        await SendAsync(ws, MakeError("0", "invalid_message", "invalid message"), options);
                         continue;
                     }
                     if(!handshakeDone && msg.Type != "hello")
                     {
-                        Console.WriteLine("Handshake missing, ignoring message");
+                        await SendAsync(ws, MakeError(msg.Id, "handshake_required", "send hello first"), options);
                         continue;
                     }
                     switch (msg.Type)
                     {
                         case "hello":
-                            var deviceName = msg.Data.GetProperty("device_name").GetString();
-                            handshakeDone = true;
-                            Console.WriteLine($"device_name: {deviceName}");
-                            var data = JsonSerializer.SerializeToElement(new { server_name = "PC", protocol_version = 1});
-                            var reply = new Message(msg.Id, "hello_ack", data);
-                            var json = JsonSerializer.Serialize(reply, options);
-                            var bytes = Encoding.UTF8.GetBytes(json);
-                            await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
-
+                            if (handshakeDone) {
+                                await SendAsync(ws, MakeError(msg.Id, "already_handshaken", "handshake already done"), options);
+                                continue;
+                            }
+                            handshakeDone = await HandleHelloAsync(ws, msg, options);
+                            break;
+                        case "offer_files":
+                            await HandleOfferFilesAsync(ws, msg, options);
                             break;
                         default:
-                            Console.WriteLine($"Uknown type: {msg.Type}");
-                            break;
+                            await SendAsync(ws, MakeError(msg.Id, "unknow type", "send a valid type"), options);
+                            continue;
                     }
 
                     Console.WriteLine(msg);
@@ -113,10 +121,59 @@ public class TransferServer
             _app = null;
         }
     }
-}
 
-public record Message(
-    string Id,
-    string Type,
-    JsonElement Data
-);
+    private static async Task<bool> HandleHelloAsync(WebSocket ws, Message msg, JsonSerializerOptions options)
+    {
+        if (msg.Data.ValueKind != JsonValueKind.Object)
+        {
+            await SendAsync(ws, MakeError(msg.Id, "invalid_data", "send a valid data"), options);
+            return false;
+        }
+        if (!msg.Data.TryGetProperty("device_name", out var el)
+            || el.ValueKind != JsonValueKind.String)
+        {
+            await SendAsync(ws, MakeError(msg.Id, "invalid_message", "device_name is required"), options);
+            return false;
+        }
+        var deviceName = el.GetString();
+        Console.WriteLine($"device_name: {deviceName}");
+        var data = JsonSerializer.SerializeToElement(new { server_name = "PC", protocol_version = 1});
+        var reply = new Message(msg.Id, "hello_ack", data);
+        await SendAsync(ws, reply, options);
+        return true;
+    }
+
+    private static async Task HandleOfferFilesAsync(WebSocket ws, Message msg, JsonSerializerOptions options)
+    {
+        var validate = await ValidateMessageAsync(msg, options);
+        if (!validate)
+        {
+            await SendAsync(ws, MakeError(msg.Id, "invalid_data", "invalid data"), options);
+            return;
+        }
+
+    }
+
+    private static async Task<bool> ValidateMessageAsync(Message msg, JsonSerializerOptions options)
+    {
+        if (msg.ValueKind != Object)
+        {
+            return false;
+        }
+
+    }
+
+    static Message MakeError(string id, string code, string message)
+    {
+        var data = JsonSerializer.SerializeToElement(new { code, message });
+        return new Message(id, "error", data);
+    }
+
+    static async Task SendAsync(WebSocket ws, Message msg, JsonSerializerOptions options)
+    {
+        var json = JsonSerializer.Serialize(msg, options);
+        var bytes = Encoding.UTF8.GetBytes(json);
+        await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+    }
+
+}
