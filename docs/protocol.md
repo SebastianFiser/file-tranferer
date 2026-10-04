@@ -81,10 +81,12 @@ file download
   -request
   {
     "id": "",
-    "type": "download_file",
+    "type": "request_files",
     "data": {
-      "item_id": "",
-      "transfer_id": ""
+      "transfer_id": "",
+      "file_ids": [
+        "id":""
+      ]
     }
   }  -response bad
   {
@@ -143,14 +145,43 @@ Control, code, whole messg
 data is not an object -> invalid_data -> yes
 files missing or isnt a field -> invalid_data -> yes
 element in field is not an object -> invalid_data -> yes¨
-relative path is missing, isnt a string is empty -> invalid_file -> yes
+relative path is missing, isnt a string is empty -> invalid_filepath -> yes
 relative path contains .. segments, starts / or C\¨, constrains \ -> invalid_path -> yes
 after path.GetfullPath the path misses the target  invalid_path -> yes
-size missing, isnt number, unreadeble as long 64 number -> invalid_data -> yes
-size is negative -> invalid_data -> yes
-file_id missing, isnt a string -> invalid_data -> yes
-file_id is duplicate -> invalid_data -> yes //hash setting 
-two files have the same relative path -> invalid_data -> yes
-file count is higher than Maxfiles -> invalid_data -> yes //around 10 000 files
-whole size amount larger than MaxTotalSize -> invalid_data -> yes /around 50GB at once 
-theres not enough space on disk -> invalid_data -> yes
+size missing, isnt number, unreadeble as long 64 number -> invalid_size -> yes
+size is negative -> negativne_sizew -> yes
+file_id missing, isnt a string ->invalid_file_id -> yes
+file_id is duplicate -> duplicate_id -> yes //hash setting 
+two files have the same relative path -> duplicate_path -> yes
+file count is higher than Maxfiles -> file_count_too_high -> yes //around 10 000 files
+whole size amount larger than MaxTotalSize -> size_too_large -> yes /around 50GB at once 
+theres not enough space on disk -> not_enough_space -> yes
+
+
+server response -> offer ack
+
+{
+  "id":"0",
+  "type": "offer_ack",
+  "data" : {
+    "accepted": true,
+    "transfer_id": "",
+    "max_batch_files": 0,
+    "max_batch_size": 0
+  }
+}
+
+-> file sending
+have to have headers
+[1 B: lůenght file_id][N B: filer_id][9 B: offset][1 B:flags][data...]
+larger files have to split to 256kb to 1MB splits.
+
+why offsets and not hunk numbers? -> connection drops lostr data, or corrupted. if that hapoenns we can re-request thze data rom top certain point without reending too much
+
+what if file_id of incoming files wasnt in the opffer? drop the file
+Chun with a wrong offset ? -> 1. re-reuest file, and calculate how much we got after that chgnk.
+
+current design offer_files -> offer_ack (trans. id, limits)
+server: request_files(id "s_...", transfer_id, files[{file_id, offset?}])
+client: binary frames [1 B: lůenght file_id][N B: filer_id][9 B: offset][1 B:flags][data...]
+server: checking file_id + offset, write, size chcecking
