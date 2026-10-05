@@ -20,9 +20,9 @@ public class TransferServer
 
     static readonly string _basePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     static readonly string _appPath = Path.Combine(_basePath, "file-transferer");
-    
+
     private const int MaxBatchFiles = 500;
-    private const long MaxBatchBytes = 64L * 1024 * 1024; 
+    private const long MaxBatchBytes = 64L * 1024 * 1024;
 
     public async Task StartAsync()
     {
@@ -88,8 +88,8 @@ public class TransferServer
                     {
                         await SendAsync(ws, MakeError(msg.Id, "handshake_required", "send hello first"), options);
                         continue;
-                    }
-                    switch (msg.Type)
+                    } //why isnt this bullshit hackatime tracking my terminal??
+                    switch (msg.Type) //i just want to sleep my friend.
                     {
                         case "hello":
                             if (state.HandshakeDone) {
@@ -172,6 +172,10 @@ public class TransferServer
             await SendAsync(ws, MakeError(msg.Id, "handshake_required", "send hello first"), options);
             return;
         }
+        if (state.TransferId != null) {
+            await SendAsync(ws, MakeError(msg.Id, "transfer_in_progress", "a transfer is already in progress"), options);
+            return;
+        }
 
         var error = ValidateOffer(msg.Data);
         if (error != null)
@@ -226,7 +230,13 @@ public class TransferServer
 
     static async Task sendOfferAckAsync(WebSocket ws, string id, JsonSerializerOptions options, ConnectionState state)
     {
-        await SendAsync(ws, MakeOfferAck(id, state.TransferId!), options); 
+
+        await SendAsync(ws, MakeOfferAck(id, state.TransferId!), options);
+        var batch = SelectBatch(state);
+
+        if (batch.Count > 0)
+            await SendAsync(ws, MakeRequestFiles(state.TransferId!, batch), options);
+
     }
 
     private static Message MakeOfferAck(string id, string transferId)
@@ -241,6 +251,36 @@ public class TransferServer
         });
 
         return new Message(id, "offer_ack", data);
+    }
+
+    private static List<string> SelectBatch(ConnectionState state)
+    {
+        var batch = new List<string>();
+        long batchBytes = 0;
+
+        foreach (var (id, f) in state.Files)
+        {
+            if (f.Requested) continue;
+
+            if (batch.Count > 0 && batchBytes + f.Size > MaxBatchBytes) continue;
+            if (batch.Count >= MaxBatchFiles) break;
+
+            batch.Add(id);
+            batchBytes += f.Size;
+            f.Requested = true;
+        }
+        return batch;
+    }
+
+    private static Message MakeRequestFiles(string transferId, List<string> fileIds)
+    {
+        var data = JsonSerializer.SerializeToElement(new
+        {
+            transfer_id = transferId,
+            file_ids = fileIds
+        });
+
+        return new Message("s_" + Guid.NewGuid().ToString("N"), "request_files", data);
     }
 
     private static long CalculateSize(JsonElement data) {
