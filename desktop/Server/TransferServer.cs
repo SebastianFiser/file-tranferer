@@ -20,6 +20,9 @@ public class TransferServer
 
     static readonly string _basePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     static readonly string _appPath = Path.Combine(_basePath, "file-transferer");
+    
+    private const int MaxBatchFiles = 500;
+    private const long MaxBatchBytes = 64L * 1024 * 1024; 
 
     public async Task StartAsync()
     {
@@ -214,15 +217,30 @@ public class TransferServer
         }
 
         Directory.CreateDirectory(baseDir);
+        state.Files = files;
         state.TransferId = "t_" + Guid.NewGuid().ToString("N");
 
-        await offerAck(ws, msg.Id, options);
+        await sendOfferAckAsync(ws, msg.Id, options, state);
 
     }
 
-    static async Task offerAck(WebSocket ws, string id, JsonSerializerOptions options)
+    static async Task sendOfferAckAsync(WebSocket ws, string id, JsonSerializerOptions options, ConnectionState state)
+    {
+        await SendAsync(ws, MakeOfferAck(id, state.TransferId!), options); 
+    }
+
+    private static Message MakeOfferAck(string id, string transferId)
     {
 
+        var data = JsonSerializer.SerializeToElement(new
+        {
+            accepted = true,
+            transfer_id = transferId,
+            max_batch_files = MaxBatchFiles,
+            max_batch_bytes = MaxBatchBytes,
+        });
+
+        return new Message(id, "offer_ack", data);
     }
 
     private static long CalculateSize(JsonElement data) {
