@@ -1,4 +1,5 @@
 namespace desktop.Server;
+using System.Security.Cryptography;
 
 public class FileTransferState
 {
@@ -9,4 +10,6 @@ public class FileTransferState
     public string TargetPath  { get; init; } = "";
     public long BytesRecived { get; set; }
     public FileStream? Stream { get; set; }
+    public IncrementalHash? Hasher { get; set; }
+    public string? Sha256 { get; set; }
 }

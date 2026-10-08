@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using System.Buffers.Binary;
 using System.IO;
+using System.Security.Cryptography;
 
 
 namespace desktop.Server;
@@ -117,13 +118,18 @@ public class TransferServer
                         {
                             Directory.CreateDirectory(Path.GetDirectoryName(file.TargetPath)!);
                             file.Stream = new FileStream(partPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
+                            file.Hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
                         }
                         file.Stream.Seek(offset, SeekOrigin.Begin);
                         await file.Stream.WriteAsync(data);
+                        file.Hasher!.AppendData(data.Span);
                         file.BytesRecived += data.Length;
 
                         if (file.BytesRecived >= file.Size)
                         {
+                            file.Sha256 = Convert.ToHexString(file.Hasher!.GetHashAndReset());
+                            file.Hasher.Dispose();
+                            file.Hasher = null;
                             await file.Stream.DisposeAsync();
                             file.Stream = null;
                             File.Move(partPath, file.TargetPath, overwrite: true);
@@ -243,16 +249,14 @@ public class TransferServer
         return true;
     }
 
-    private static async Task sendTransferCompletedAsync(WebSocket ws, string transferId, JsonSerializerOptions options)
+    private static Message MakeTransferComplete(string transferId, ConnectionState state)
     {
-        await SendAsync(ws, MakeTransferComplete(transferId), options); //hehehehhe not much left
-    }
+        var hashes = state.Files.Select(kv => new { file_id = kv.Key, sha256 = kv.Value.Sha256 }).ToList();
 
-    private static Message MakeTransferComplete(string transferId)
-    {
         var data = JsonSerializer.SerializeToElement(new
         {
-            transfer_id = transferId
+            transfer_id = transferId,
+            hash = hashes
         });
 
         return new Message("0", "transfer_complete", data);
@@ -373,7 +377,7 @@ public class TransferServer
         if (state.Files.Values.All(f => f.BytesRecived >= f.Size))
         {
             var transferId = state.TransferId!;
-            await SendAsync(ws, MakeTransferComplete(transferId), options);
+            await SendAsync(ws, MakeTransferComplete(transferId, state), options);
             state.TransferId = null;
             state.Files = new Dictionary<string, FileTransferState>();
         }
