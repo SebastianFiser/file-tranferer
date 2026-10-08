@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using System.Buffers.Binary;
 using System.IO;
 
 
@@ -26,6 +27,7 @@ public class TransferServer
 
     public async Task StartAsync()
     {
+
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://0.0.0.0:5000");
         Directory.CreateDirectory(_appPath);
@@ -45,6 +47,10 @@ public class TransferServer
             using var ws = await context.WebSockets.AcceptWebSocketAsync();
             var buffer = new byte[8];
             var state = new ConnectionState();
+            var options = new JsonSerializerOptions {
+                PropertyNameCaseInsensitive = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
             try
             {
                 while (true)
@@ -63,12 +69,73 @@ public class TransferServer
                         ms.Write(buffer, 0, result.Count);
                     }
                     while (!result.EndOfMessage);
+//why you aint working wro
+
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        Console.WriteLine("client sent close");
+                    }
+                    if (result.MessageType == WebSocketMessageType.Binary)
+                    {
+                        if ( state.TransferId == null )
+                        {
+                            await SendAsync(ws, MakeError("0", "invalid_process", "binary isnt accepted if no transfer is in progress"), options);
+                            break;
+                        }
+
+                        byte[] frame = ms.ToArray();
+                        bool ok = TryParseChunk(frame, out var fileId, out var offset, out var flags, out var dataStart);
+                        if (ok == false) {
+                            await SendAsync(ws, MakeError("0", "invalid_binary", "parsing of this binary frame failed, please send valid data"), options);
+                            break;
+                        }
+
+                        var data = frame.AsMemory(dataStart);
+
+
+                        if (!state.Files.TryGetValue(fileId, out var file))
+                        {
+                            await SendAsync(ws, MakeError("0", "unknown_file", "no such file is being transferred"), options);
+                            continue;
+                        }
+                        var partPath = file.TargetPath + ".part";
+
+                        if (offset < 0 || offset + data.Length > file.Size)
+                        {
+                            await SendAsync(ws, MakeError("0", "bad_range", "offset is out of bounds"), options);
+                            continue;
+                        }
+                        Console.WriteLine($"chunk file={fileId} offset={offset} received={file.BytesRecived} size={file.Size}");
+                        if (offset != file.BytesRecived)
+                        {
+                            await SendAsync(ws, MakeError("0", "bad_offset", "chunk or offset does not match the reciving bytes"), options);
+                            continue;
+                        }
+
+
+                        if (file.Stream == null)
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(file.TargetPath)!);
+                            file.Stream = new FileStream(partPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
+                        }
+                        file.Stream.Seek(offset, SeekOrigin.Begin);
+                        await file.Stream.WriteAsync(data);
+                        file.BytesRecived += data.Length;
+
+                        if (file.BytesRecived >= file.Size)
+                        {
+                            await file.Stream.DisposeAsync();
+                            file.Stream = null;
+                            File.Move(partPath, file.TargetPath, overwrite: true);
+                            await CompleteIfDoneAsync(ws, options, state);
+
+                        }
+
+
+                        continue;
+                    }
 
                     var text = Encoding.UTF8.GetString(ms.ToArray());
-                    var options = new JsonSerializerOptions {
-                        PropertyNameCaseInsensitive = true,
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                    };
                     Message? msg;
                     try
                     {
@@ -88,7 +155,7 @@ public class TransferServer
                     {
                         await SendAsync(ws, MakeError(msg.Id, "handshake_required", "send hello first"), options);
                         continue;
-                    } //why isnt this bullshit hackatime tracking my terminal??
+                    }
                     switch (msg.Type) //i just want to sleep my friend.
                     {
                         case "hello":
@@ -111,11 +178,22 @@ public class TransferServer
             }
             catch (WebSocketException ex)
             {
-                Console.WriteLine("Client crashed: {Msg}", ex.Message);
+                Console.WriteLine("Client crashed: {ex.Message");
+            }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine("Client connection aborted");
             }
             finally
             {
-                Console.WriteLine("Client Disconnected");
+                Console.WriteLine("Connection closed, cleaning up");
+                foreach (var f in state.Files.Values) {
+                    if (f.Stream != null)
+                    {
+                        await f.Stream.DisposeAsync();
+                        f.Stream = null;
+                    }
+                }
             }
         });
 
@@ -130,6 +208,54 @@ public class TransferServer
             await _app.DisposeAsync();
             _app = null;
         }
+    }
+
+    private static bool TryParseChunk(
+        ReadOnlySpan<byte> frame,
+        out string fileId,
+        out long offset,
+        out byte flags,
+        out int dataStart)
+    {
+        fileId = "";
+        offset = 0;
+        flags = 0;
+        dataStart = 0;
+
+
+        if (frame.Length < 1) {
+            return false;
+        }
+        var idLen = frame[0];
+        if (idLen == 0 || frame.Length < 1 + idLen + 8 + 1) {
+            return false;
+        }
+
+        var idStart = 1;
+        var offsetStart = idStart + idLen;
+        var flagsIndex = offsetStart + 8;
+        dataStart = flagsIndex + 1;
+
+        fileId = Encoding.UTF8.GetString(frame.Slice(idStart, idLen));
+        offset = BinaryPrimitives.ReadInt64BigEndian(frame.Slice(offsetStart, 8));
+        flags =  frame[flagsIndex];
+
+        return true;
+    }
+
+    private static async Task sendTransferCompletedAsync(WebSocket ws, string transferId, JsonSerializerOptions options)
+    {
+        await SendAsync(ws, MakeTransferComplete(transferId), options); //hehehehhe not much left
+    }
+
+    private static Message MakeTransferComplete(string transferId)
+    {
+        var data = JsonSerializer.SerializeToElement(new
+        {
+            transfer_id = transferId
+        });
+
+        return new Message("0", "transfer_complete", data);
     }
 
     private static async Task<bool> HandleHelloAsync(WebSocket ws, Message msg, JsonSerializerOptions options, ConnectionState state)
@@ -164,6 +290,8 @@ public class TransferServer
         await SendAsync(ws, reply, options);
         return true;
     }
+
+//time to rock today lowk
 
     private static async Task HandleOfferFilesAsync(WebSocket ws, Message msg, JsonSerializerOptions options, ConnectionState state)
     {
@@ -212,11 +340,22 @@ public class TransferServer
                 return;
             }
 
+            var isEmpty =  size == 0;
+
+            if (isEmpty)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Create(target).Dispose();
+            }
+
             files[fileId] = new FileTransferState
             {
                 RelativePath = relativePath,
-                Size = size
+                Size = size,
+                TargetPath = target,
+                Requested = isEmpty
             };
+
 
         }
 
@@ -225,7 +364,25 @@ public class TransferServer
         state.TransferId = "t_" + Guid.NewGuid().ToString("N");
 
         await sendOfferAckAsync(ws, msg.Id, options, state);
+        await CompleteIfDoneAsync(ws, options, state);
 
+    }//WHY ISNT IT COMPILING
+
+    private static async Task CompleteIfDoneAsync(WebSocket ws, JsonSerializerOptions options, ConnectionState state)
+    {
+        if (state.Files.Values.All(f => f.BytesRecived >= f.Size))
+        {
+            var transferId = state.TransferId!;
+            await SendAsync(ws, MakeTransferComplete(transferId), options);
+            state.TransferId = null;
+            state.Files = new Dictionary<string, FileTransferState>();
+        }
+        else if (state.Files.Values.Where(f => f.Requested).All(f => f.BytesRecived >= f.Size))
+        {
+            var batch = SelectBatch(state);
+            if (batch.Count > 0)
+                await SendAsync(ws, MakeRequestFiles(state.TransferId!, batch), options);
+        }
     }
 
     static async Task sendOfferAckAsync(WebSocket ws, string id, JsonSerializerOptions options, ConnectionState state)

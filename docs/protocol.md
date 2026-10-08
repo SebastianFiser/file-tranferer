@@ -183,5 +183,5 @@ Chun with a wrong offset ? -> 1. re-reuest file, and calculate how much we got a
 
 current design offer_files -> offer_ack (trans. id, limits)
 server: request_files(id "s_...", transfer_id, files[{file_id, offset?}])
-client: binary frames [1 B: lůenght file_id][N B: filer_id][9 B: offset][1 B:flags][data...]
+client: binary frames [1 B: lůenght file_id][N B: filer_id][8 B: offset][1 B:flags][data...]
 server: checking file_id + offset, write, size chcecking

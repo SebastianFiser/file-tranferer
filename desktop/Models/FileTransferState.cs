@@ -6,4 +6,7 @@ public class FileTransferState
     public long Size { get; init; }
     public long Recive { get; set; }
     public bool Requested { get; set; }
+    public string TargetPath  { get; init; } = "";
+    public long BytesRecived { get; set; }
+    public FileStream? Stream { get; set; }
 }

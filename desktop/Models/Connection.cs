@@ -9,5 +9,4 @@ class ConnectionState
     public string? TransferId { get; set; }
     public string? DeviceName { get; set; }
     public Dictionary<string, FileTransferState> Files { get; set; } = new();
-
 }
