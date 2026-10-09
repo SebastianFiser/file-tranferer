@@ -1,7 +1,7 @@
 package org.dpdns.sebastianfiser.filetransferer.protocol
 
 import kotlinx.serialization.Serializable
-import koltinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonElement
 kotlinx.serialization.SerialName
 
 @Serializable

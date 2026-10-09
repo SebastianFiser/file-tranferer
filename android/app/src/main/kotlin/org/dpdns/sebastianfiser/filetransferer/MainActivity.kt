@@ -28,7 +28,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Box(Modifier.fillMaxSize(), contentAlignment.Center) {
-                    Button(onclick = { transferClient.connect("ws://192.168.0.116:5000") }) {
+                    Button(onClick = { transferClient.connect("ws://192.168.0.116:5000") }) {
                         Text("Connect")
                     }
                 }
