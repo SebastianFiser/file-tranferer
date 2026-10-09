@@ -17,7 +17,7 @@ class TransferClient(
     private val client = OkHttpClient()
     private var webSocket: WebSocket? = null
 
-    private val jseon = Json
+    private val json = Json
 
     fun connect(url: String) {
         val request = Request.Builder().url(url).build()
