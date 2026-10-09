@@ -23,11 +23,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        transferClient = TransferClient("{Build.MODEL}[$androidId]")
+        transferClient = TransferClient("${Build.MODEL}[$androidId]")
 
         setContent {
             MaterialTheme {
-                Box(Modifier.fillMaxSize(), contentAlignment = contentAlignment.Center) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Button(onClick = { transferClient.connect("ws://192.168.0.116:5000") }) {
                         Text("Connect")
                     }
@@ -38,6 +38,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         transferClient.close()
-        super.onDestroy();
+        super.onDestroy()
     }
 }

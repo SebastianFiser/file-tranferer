@@ -2,7 +2,7 @@ package org.dpdns.sebastianfiser.filetransferer.protocol
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
-kotlinx.serialization.SerialName
+import kotlinx.serialization.SerialName
 
 @Serializable
 data class Envelope(
