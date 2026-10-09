@@ -21,7 +21,7 @@ hello handshake
       "device_name": "", //required data 
       "protocol_version": 0 // currently not required data
     }
-  }
+  } //kotlin 100%
   -server
   {
     "id" : "0",
