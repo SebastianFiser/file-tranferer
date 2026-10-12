@@ -25,7 +25,7 @@ data class HelloData(
 data class FileInfo(
     @SerialName("relative_path") val relativePath: String,
     val size: Long,
-    @Serializable("file_id") val fileId: String
+    @SerialName("file_id") val fileId: String
 )
 
 @Serializable
