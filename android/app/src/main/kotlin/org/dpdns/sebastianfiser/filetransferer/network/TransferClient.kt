@@ -13,6 +13,7 @@ import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.JsonElement
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
@@ -77,7 +78,7 @@ class TransferClient(
         ws.send(Json.encodeToString(hello))
     }
 
-    susped fun sendOfferFiles(files: List<FileInfo>): OfferAckData {
+    suspend fun sendOfferFiles(files: List<FileInfo>): OfferAckData {
         val data = Json.encodeToJsonElement(OfferFilesData(files))
         val response = request("offer_files", data)
         val ack = Json.decodeFromJsonElement<OfferAckData>(response.data)
