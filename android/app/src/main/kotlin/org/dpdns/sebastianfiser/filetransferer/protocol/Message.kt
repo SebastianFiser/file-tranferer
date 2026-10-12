@@ -32,3 +32,20 @@ data class FileInfo(
 data class OfferFilesData(
     val files: List<FileInfo>
 )
+
+@Serializable
+data class OfferAckData(
+    val accepted: Boolean,
+    @SerialName("transfer_id") val transferId: String,
+    @SerialName("max_batch_files") val maxBatchFiles: Int,
+    @SerialName("max_batch_bytes") val maxBatchBytes
+)
+
+//send files stuff
+
+@Serializable
+data class RequestFilesData(
+    @SerialName("transfer_id") val transferId: String,
+    @SerialName("fil_ids") val fileIds: List<String>
+)
+//eausdvykghvj <- my mental state rn
