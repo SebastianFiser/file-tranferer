@@ -63,35 +63,35 @@ class TransferClient(
     fun close() {
         webSocket?.close(1000, null)
     }
-}
 
-fun sendHello(deviceName: String) {
-    val hello = Envelope(
-        id = UUID.randomUUID().toString(),
-        type = "hello",
-        data = Json.encodeToJsonElement(HelloData(deviceName, 1))
-    )
-    webSocket.send(Json.encodeToString(hello))
-}
+    fun sendHello(deviceName: String) {
+        val hello = Envelope(
+            id = UUID.randomUUID().toString(),
+            type = "hello",
+            data = Json.encodeToJsonElement(HelloData(deviceName, 1))
+        )
+        webSocket.send(Json.encodeToString(hello))
+    }
 
-susped fun sendOfferFiles(files: List<FileInfo>): OfferAckData {
-    val data = Json.encodeToJsonElement(OfferFilesData(files))
-    val response = request("offer_files", data)
-    val ack = Json.decodeFromJsonElement<OfferAckData>(response.data)
-    check(ack.accepted) { "server declined offer_files" }
-    return ack
-}
+    susped fun sendOfferFiles(files: List<FileInfo>): OfferAckData {
+        val data = Json.encodeToJsonElement(OfferFilesData(files))
+        val response = request("offer_files", data)
+        val ack = Json.decodeFromJsonElement<OfferAckData>(response.data)
+        check(ack.accepted) { "server declined offer_files" }
+        return ack
+    }
 
-suspend fun request(type: String, data: JsonElement, timeoutMs: Long = 5000): Envelope  {
-    val id = UUID.randomUUID().toString()
-    val waiter = CompletableDeferred<Envelope>()
-    pending[id] = waiter
-    val text = Json.encodeToString(Envelope(id, type, data))
-    Log.d("TransferClient", "out going id=$id type=$type")
-    webSocket.send(text)
-    try {
-        return withTimeout(timeoutMs) { waiter.await() }
-    } finally {
-        pending.remove(id)
+    suspend fun request(type: String, data: JsonElement, timeoutMs: Long = 5000): Envelope  {
+        val id = UUID.randomUUID().toString()
+        val waiter = CompletableDeferred<Envelope>()
+        pending[id] = waiter
+        val text = Json.encodeToString(Envelope(id, type, data))
+        Log.d("TransferClient", "out going id=$id type=$type")
+        webSocket.send(text)
+        try {
+            return withTimeout(timeoutMs) { waiter.await() }
+        } finally {
+            pending.remove(id)
+        }
     }
 }
