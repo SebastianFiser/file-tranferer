@@ -23,12 +23,13 @@ class TransferClient(
         val request = Request.Builder().url(url).build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                val hello = Envelope(
-                    id = UUID.randomUUID().toString(),
-                    type = "hello",
-                    data = json.encodeToJsonElement(HelloData(deviceName, 1))
+                sendHello(webSocket)
+                val files = listOf(
+                    FileInfo("a.txt", 10, "f1"),
+                    FileInfo("b.txt", 20, "f2")
                 )
-                webSocket.send(json.encodeToString(hello))
+                sendOfferFiles(webSocket, files)
+
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -44,4 +45,24 @@ class TransferClient(
     fun close() {
         webSocket?.close(1000, null)
     }
+}
+
+fun sendHello(webSocket: WebSocket) {
+    val hello = Envelope(
+        id = UUID.randomUUID().toString(),
+        type = "hello",
+        data = json.encodeToJsonElement(HelloData(deviceName, 1))
+    )
+    webSocket.send(json.encodeToString(hello))
+}
+
+fun sendOfferFiles(webSocket: WebSocket, files: List<FileInfo>) {
+    val data = Json.encodeToJsonElement(OfferFilesData(files))
+    val envelope = Envelope(
+        UUID.randomUUID().toString(),
+        "offer_files",
+        data
+    )
+    val text = Json.encodeToString(envelope)
+    webSocket.send(text)
 }

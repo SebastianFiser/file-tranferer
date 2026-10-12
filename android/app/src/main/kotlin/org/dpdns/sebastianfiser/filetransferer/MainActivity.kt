@@ -36,6 +36,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // im hanging myself this year  1000% trust or this is going to end badly
+
     override fun onDestroy() {
         transferClient.close()
         super.onDestroy()
