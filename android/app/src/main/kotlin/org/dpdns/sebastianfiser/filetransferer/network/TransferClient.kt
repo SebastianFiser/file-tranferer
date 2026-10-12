@@ -11,6 +11,9 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.decodeFromJsonElement
+import koltinx.serialization.json.JsonElement
+import kotlinx.coroutine.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
@@ -42,7 +45,7 @@ class TransferClient(
                     Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}")
                 }
 
-            }
+            }// COMPILE YOU DUMB THING
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val envelope = Json.decodeFromString<Envelope>(text)
@@ -70,7 +73,8 @@ class TransferClient(
             type = "hello",
             data = Json.encodeToJsonElement(HelloData(deviceName, 1))
         )
-        webSocket.send(Json.encodeToString(hello))
+        val ws = webSocket ?: error("Not Connected")
+        ws.send(Json.encodeToString(hello))
     }
 
     susped fun sendOfferFiles(files: List<FileInfo>): OfferAckData {
@@ -87,7 +91,8 @@ class TransferClient(
         pending[id] = waiter
         val text = Json.encodeToString(Envelope(id, type, data))
         Log.d("TransferClient", "out going id=$id type=$type")
-        webSocket.send(text)
+        val ws = webSocket ?: error("Not Connected")
+        ws.send(text)
         try {
             return withTimeout(timeoutMs) { waiter.await() }
         } finally {
