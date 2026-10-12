@@ -40,7 +40,7 @@ class TransferClient(
                     FileInfo("b.txt", 20, "f2")
                 )
 
-                scope.lauch {
+                scope.launch {
                     val ack = sendOfferFiles(files)
                     Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}")
                 }
