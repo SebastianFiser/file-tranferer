@@ -30,5 +30,5 @@ data class FileInfo(
 
 @Serializable
 data class OfferFilesData(
-    val files: List<FileId>
+    val files: List<FileInfo>
 )

@@ -4,6 +4,8 @@ import android.util.Log
 import okhttp3.*
 import org.dpdns.sebastianfiser.filetransferer.protocol.Envelope
 import org.dpdns.sebastianfiser.filetransferer.protocol.HelloData
+import org.dpdns.sebastianfiser.filetransferer.protocol.FileInfo
+import org.dpdns.sebastianfiser.filetransferer.protocol.OfferFilesData
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
@@ -17,7 +19,7 @@ class TransferClient(
     private val client = OkHttpClient()
     private var webSocket: WebSocket? = null
 
-    private val json = Json
+
 
     fun connect(url: String) {
         val request = Request.Builder().url(url).build()
@@ -51,9 +53,9 @@ fun sendHello(webSocket: WebSocket) {
     val hello = Envelope(
         id = UUID.randomUUID().toString(),
         type = "hello",
-        data = json.encodeToJsonElement(HelloData(deviceName, 1))
+        data = Json.encodeToJsonElement(HelloData(deviceName, 1))
     )
-    webSocket.send(json.encodeToString(hello))
+    webSocket.send(Json.encodeToString(hello))
 }
 
 fun sendOfferFiles(webSocket: WebSocket, files: List<FileInfo>) {
