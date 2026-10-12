@@ -6,6 +6,7 @@ import org.dpdns.sebastianfiser.filetransferer.protocol.Envelope
 import org.dpdns.sebastianfiser.filetransferer.protocol.HelloData
 import org.dpdns.sebastianfiser.filetransferer.protocol.FileInfo
 import org.dpdns.sebastianfiser.filetransferer.protocol.OfferFilesData
+import org.dpdns.sebastianfiser.filetransferer.protocol.OfferAckData
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
@@ -24,13 +25,13 @@ class TransferClient(
     private var webSocket: WebSocket? = null
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Envelope>>()
 
-    scope = CoroutineScope(DispatchersIO)
+    private val scope = CoroutineScope(Dispatchers.IO)
 
     fun connect(url: String) {
         val request = Request.Builder().url(url).build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                sendHello(wdeviceName)
+                sendHello(deviceName)
                 val files = listOf(
                     FileInfo("a.txt", 10, "f1"),
                     FileInfo("b.txt", 20, "f2")
@@ -38,7 +39,7 @@ class TransferClient(
 
                 scope.lauch {
                     val ack = sendOfferFiles(files)
-                    Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId})
+                    Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}")
                 }
 
             }
@@ -49,7 +50,7 @@ class TransferClient(
                 if (waiter != null) {
                     waiter.complete(envelope)
                 } else {
-                    Log.d("TransferClient", "server-initated: {envelope.type})
+                    Log.d("TransferClient", "server-initated: {envelope.type}")
                 }
             }
 
@@ -76,7 +77,7 @@ fun sendHello(deviceName: String) {
 susped fun sendOfferFiles(files: List<FileInfo>): OfferAckData {
     val data = Json.encodeToJsonElement(OfferFilesData(files))
     val response = request("offer_files", data)
-    val ack = Json.decodeFromJsonElement<OfferAcData>(response.data)
+    val ack = Json.decodeFromJsonElement<OfferAckData>(response.data)
     check(ack.accepted) { "server declined offer_files" }
     return ack
 }

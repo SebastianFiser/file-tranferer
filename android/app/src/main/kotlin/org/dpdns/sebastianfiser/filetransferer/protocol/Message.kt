@@ -38,7 +38,7 @@ data class OfferAckData(
     val accepted: Boolean,
     @SerialName("transfer_id") val transferId: String,
     @SerialName("max_batch_files") val maxBatchFiles: Int,
-    @SerialName("max_batch_bytes") val maxBatchBytes
+    @SerialName("max_batch_bytes") val maxBatchBytes: Long
 )
 
 //send files stuff
