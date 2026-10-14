@@ -4,14 +4,14 @@ import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
 
-data calss PickedFile(
+data class PickedFile(
     val uri: Uri,
     val name: String,
     val size: Long
 )
 
 fun queryFile(resolver: ContentResolver, uri: Uri): PickedFile? {
-    val projection = arrayOf(OpenableColumns.DISPLAY_NAME, OenableColumn.SIZE)
+    val projection = arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumn.SIZE)
     resolver.query(uri, projection, null, null, null)?.use { cursor ->
         if (!cursor.moveToFirst()) return null
 
