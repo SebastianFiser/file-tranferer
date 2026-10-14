@@ -114,7 +114,7 @@ class TransferClient(
 
     suspend fun awaitServerMessage(type: String, timeoutMs: Long = 5000): Envelope =
         withTimeout(timeoutMs) {
-            var msg = serverMessages.receive()
+            var msg = serverMessages.receive() //HAHAHAH it compiled!
             while(msg.type != type) msg = serverMessages.receive()//lowk lock in
             msg//i would like to watch a movie but i cant find it lowk
         }
