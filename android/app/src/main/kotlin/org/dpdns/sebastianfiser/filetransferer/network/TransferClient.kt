@@ -55,7 +55,7 @@ class TransferClient(
                     Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}")
                 }
 
-                Log.d("TransferClient", buildChunk("f1", 0, FLAG_LAST, ByteArray(10)).joinToString(" ") { "%02x".format(it) }
+                Log.d("TransferClient", buildChunk("f1", 0, FLAG_LAST, ByteArray(10)).joinToString(" ") { "%02x".format(it) })
 
             }// COMPILE YOU DUMB THING
 
@@ -114,8 +114,8 @@ class TransferClient(
 
     suspend fun awaitServerMessage(type: String, timeoutMs: Long = 5000): Envelope =
         withTimeout(timeoutMs) {
-            var msg = serverMessages.recive()
-            while(msg.type != type) msg = serverMessages.recive()//lowk lock in
+            var msg = serverMessages.recieve()
+            while(msg.type != type) msg = serverMessages.receive()//lowk lock in
             msg//i would like to watch a movie but i cant find it lowk
         }
 
