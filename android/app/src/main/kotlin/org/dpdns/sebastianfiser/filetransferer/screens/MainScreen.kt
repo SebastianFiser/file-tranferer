@@ -23,7 +23,7 @@ fun MainScreen() {
         ActivityResultContracts.OpenMultipleDcuments()
     ) {
         uris: List<Uri> ->
-        uris.forEach {
+        uris.forEach { uri ->
             val picked = queryFile(context.contentResolver, uri)
             Log.d("Mainscreen", "picked: $picked")
         }

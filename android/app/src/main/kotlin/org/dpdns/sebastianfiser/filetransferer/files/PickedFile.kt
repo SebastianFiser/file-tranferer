@@ -11,7 +11,7 @@ data class PickedFile(
 )
 
 fun queryFile(resolver: ContentResolver, uri: Uri): PickedFile? {
-    val projection = arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumn.SIZE)
+    val projection = arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
     resolver.query(uri, projection, null, null, null)?.use { cursor ->
         if (!cursor.moveToFirst()) return null
 
