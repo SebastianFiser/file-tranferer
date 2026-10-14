@@ -19,8 +19,11 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
+import okio.ByteString.Companion.toByteString.
+
 
 private const val TAG = "TransferClient"
+const val FLAG_LAST = 0x01
 
 class TransferClient(
     private val deviceName: String
@@ -28,6 +31,8 @@ class TransferClient(
     private val client = OkHttpClient()
     private var webSocket: WebSocket? = null
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Envelope>>()
+
+    private val serverMessages = Channel<Envelope>(Channel.UNLIMITED)
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -46,6 +51,10 @@ class TransferClient(
                     Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}")
                 }
 
+                Log.d("TransferClient", buildChunk("f1", 0, FLAG_LAST, ByteArray(10)).joinToString(" ") {
+                    "%02x".format(it)
+                }
+
             }// COMPILE YOU DUMB THING
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -54,7 +63,7 @@ class TransferClient(
                 if (waiter != null) {
                     waiter.complete(envelope)
                 } else {
-                    Log.d("TransferClient", "server-initated: {envelope.type}")
+                    serverMessages.trySend(envelope)
                 }
             }
 
@@ -100,4 +109,46 @@ class TransferClient(
             pending.remove(id)
         }
     }
+
+    suspend fun awaitServerMessage(type: String, timeoutMs: Long = 5000) {
+        withTimeout(timeoutMs) {
+            var msg = serverMessages.recive()
+            while(msg.type != type) msg = serverMessages.recive()
+            msg
+        }
+    }
+
+    fun buildChunk(fileId: String, offset: Long, flags: Int, data: ByteArray): ByteArray {
+        val idBytes = fileId.toByteArray(Charsets.UTF_8)
+        val buf = ByteBuffer.allocate(1 + idBytes.size + 8 + 1 + data.size)
+        buf.order(ByteOrder.BIG_ENDIAN)
+        buf.put(idBytes.size.toByte())
+        buf.put(idBytes)
+        buf.putLong(offset)
+        buf.put(flags.toByte)
+        buf.put(data)
+        return buf.array()
+    }
+
+    suspend fun sendTestTransfer() {
+        val files = listOf(
+            FileInfo("a.txt", 10, "f1")
+            FileInfo("b.txt", 20, "f2")
+        )
+
+        val ack = sendOfferFiles(files)
+        Log.d("TransferClient", "offer accepted, tzransfer_id=${ack.transferId}")
+
+        val req = awaitServerMessae("request_files")
+        val wanted = Json.decodeFromJsonElement<RequestFilesData>(req.data)
+
+        val ws = webSocket ?: error("Not connected")
+        for (id in wanted.fileIds) {
+            val file = files.first { it.fileId == id }
+            val data = ByteArray(file.size.toInt())
+            val chunk = buildChunk(id, 0L, FLAG_LAST, data)
+            ws.send(chunk.toByteString())
+        }
+    }
+
 }

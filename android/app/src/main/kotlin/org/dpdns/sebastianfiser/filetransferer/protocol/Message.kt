@@ -46,6 +46,6 @@ data class OfferAckData(
 @Serializable
 data class RequestFilesData(
     @SerialName("transfer_id") val transferId: String,
-    @SerialName("fil_ids") val fileIds: List<String>
+    @SerialName("file_ids") val fileIds: List<String>
 )
-//eausdvykghvj <- my mental state rn
+//im genuenly gonna go to sleep at 1 am? and wake up for school at 5:40? reaaly happy bout that
