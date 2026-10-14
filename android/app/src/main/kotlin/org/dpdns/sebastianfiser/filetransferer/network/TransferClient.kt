@@ -20,7 +20,7 @@ import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
 import okio.ByteString.Companion.toByteString
-import kotlinx.coroutines.channel.Channel
+import kotlinx.coroutines.channels.Channel
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.dpdns.sebastianfiser.filetransferer.protocol.RequestFilesData
@@ -55,9 +55,7 @@ class TransferClient(
                     Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}")
                 }
 
-                Log.d("TransferClient", buildChunk("f1", 0, FLAG_LAST, ByteArray(10)).joinToString(" ") {
-                    "%02x".format(it)
-                }
+                Log.d("TransferClient", buildChunk("f1", 0, FLAG_LAST, ByteArray(10)).joinToString(" ") { "%02x".format(it) }
 
             }// COMPILE YOU DUMB THING
 
@@ -114,13 +112,12 @@ class TransferClient(
         }
     }
 
-    suspend fun awaitServerMessage(type: String, timeoutMs: Long = 5000) {
+    suspend fun awaitServerMessage(type: String, timeoutMs: Long = 5000): Envelope =
         withTimeout(timeoutMs) {
             var msg = serverMessages.recive()
-            while(msg.type != type) msg = serverMessages.recive()
-            msg
+            while(msg.type != type) msg = serverMessages.recive()//lowk lock in
+            msg//i would like to watch a movie but i cant find it lowk
         }
-    }
 
     fun buildChunk(fileId: String, offset: Long, flags: Int, data: ByteArray): ByteArray {
         val idBytes = fileId.toByteArray(Charsets.UTF_8)
@@ -136,7 +133,7 @@ class TransferClient(
 
     suspend fun sendTestTransfer() {
         val files = listOf(
-            FileInfo("a.txt", 10, "f1"),
+            FileInfo("a.txt", 10, "f1"),//why is my life taking so long
             FileInfo("b.txt", 20, "f2")
         )
 
