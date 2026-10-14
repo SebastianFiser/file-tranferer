@@ -19,9 +19,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
-import okio.ByteString.Companion.toByteString.
+import okio.ByteString.Companion.toByteString
+import kotlinx.coroutines.channel.Channel
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import org.dpdns.sebastianfiser.filetransferer.protocol.RequestFilesData
 
-
+//why isnt hackatime tracking
 private const val TAG = "TransferClient"
 const val FLAG_LAST = 0x01
 
@@ -125,21 +129,21 @@ class TransferClient(
         buf.put(idBytes.size.toByte())
         buf.put(idBytes)
         buf.putLong(offset)
-        buf.put(flags.toByte)
+        buf.put(flags.toByte())
         buf.put(data)
         return buf.array()
     }
 
     suspend fun sendTestTransfer() {
         val files = listOf(
-            FileInfo("a.txt", 10, "f1")
+            FileInfo("a.txt", 10, "f1"),
             FileInfo("b.txt", 20, "f2")
         )
 
         val ack = sendOfferFiles(files)
         Log.d("TransferClient", "offer accepted, tzransfer_id=${ack.transferId}")
 
-        val req = awaitServerMessae("request_files")
+        val req = awaitServerMessage("request_files")
         val wanted = Json.decodeFromJsonElement<RequestFilesData>(req.data)
 
         val ws = webSocket ?: error("Not connected")
