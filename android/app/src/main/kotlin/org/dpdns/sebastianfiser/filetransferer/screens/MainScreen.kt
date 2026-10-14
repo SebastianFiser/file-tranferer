@@ -20,9 +20,8 @@ fun MainScreen() {
     val context = LocalContext.current
 
     val picker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenMultipleDcuments()
-    ) {
-        uris: List<Uri> ->
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
         uris.forEach { uri ->
             val picked = queryFile(context.contentResolver, uri)
             Log.d("Mainscreen", "picked: $picked")
