@@ -48,4 +48,11 @@ data class RequestFilesData(
     @SerialName("transfer_id") val transferId: String,
     @SerialName("file_ids") val fileIds: List<String>
 )
+
+@Serializable
+data class ErrorData(
+    val code: String,
+    val message: String
+)
+
 //im genuenly gonna go to sleep at 1 am? and wake up for school at 5:40? reaaly happy bout that

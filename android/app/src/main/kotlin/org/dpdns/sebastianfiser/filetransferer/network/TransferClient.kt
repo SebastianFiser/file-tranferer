@@ -53,15 +53,6 @@ class TransferClient(
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 sendHello(deviceName)
-                val files = listOf(
-                    FileInfo("a.txt", 10, "f1"),
-                    FileInfo("b.txt", 20, "f2")
-                )
-
-                scope.launch {
-                    val ack = sendOfferFiles(files)
-                    Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}")
-                }
 
                 Log.d("TransferClient", buildChunk("f1", 0, FLAG_LAST, ByteArray(10)).joinToString(" ") { "%02x".format(it) })
 
@@ -102,6 +93,11 @@ class TransferClient(
     suspend fun sendOfferFiles(files: List<FileInfo>): OfferAckData {
         val data = Json.encodeToJsonElement(OfferFilesData(files))
         val response = request("offer_files", data)
+        Log.d("TransferClient", "offer response type=${response.type}")
+        if (response.type == "error") {
+            val err = Json.decodeFromJsonElement<ErrorData>(response.data)
+            error("server: ${err.code} : ${err.message}")
+        }
         val ack = Json.decodeFromJsonElement<OfferAckData>(response.data)
         check(ack.accepted) { "server declined offer_files" }
         return ack

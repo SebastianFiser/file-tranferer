@@ -30,7 +30,12 @@ fun MainScreen(transferClient: TransferClient) {
         if(picked.size < uris.size) {
             Log.w("MainScreen", "some files have an unknown size")
         }
-        scope.launch { transferClient.sendPickedFiles(context.contentResolver, picked ) }
+        scope.launch {
+            try {
+                transferClient.sendPickedFiles(context.contentResolver, picked )
+            } catch (e: Exception) {
+                Log.e("MainScreen", "transfer failed", e)
+            }
     }
 
     Column(
