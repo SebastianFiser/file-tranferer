@@ -11,7 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.runtime.rememberCorutineScope
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
@@ -19,9 +19,9 @@ import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 import org.dpdns.sebastianfiser.filetransferer.files.queryFile
 
 @Composable
-fun MainScreen(client: TransferClient) {
+fun MainScreen(transferClient: TransferClient) {
     val context = LocalContext.current
-    val scope = rememberCorutineScope()
+    val scope = rememberCoroutineScope()
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()

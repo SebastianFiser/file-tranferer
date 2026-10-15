@@ -24,6 +24,9 @@ import kotlinx.coroutines.channels.Channel
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.dpdns.sebastianfiser.filetransferer.protocol.RequestFilesData
+import android.content.ContentResolver
+import kotlinx.coroutines.delay
+import org.dpdns.sebastianfisr.filetransferer.files.PickedFile
 
 //why isnt hackatime tracking
 private const val TAG = "TransferClient"
@@ -175,17 +178,17 @@ class TransferClient(
 
         for (id in wanted.fileIds) {
             val file = offered[id] ?: error("Server asked for unknown file $id")
-            sendfile(resolver, file, id)
+            sendFile(resolver, file, id)
         }
 
-        val done = awaitServerMessage("transfer_complete)
+        val done = awaitServerMessage("transfer_complete")
             Log.d("TransferClient",  "server says:  ${done.type} ${done.data}")
     }
 
-//i genuenlymlove macondo, thanks to them i have thing at age i could never afford :)
+    //i genuenlymlove macondo, thanks to them i have thing at age i could never afford :)
 
     private suspend fun sendFile(resolver: ContentResolver, picked: PickedFile, fileId: String) {
-        val ws = webSocket ?: error("Not connected)
+        val ws = webSocket ?: error("Not connected")
 
         if (picked.size == 0L) {
             ws.send(buildChunk(fileId, 0L, FLAG_LAST, ByteArray(0)).toByteString())
@@ -193,7 +196,7 @@ class TransferClient(
         }
 
         val buffer = ByteArray(64 * 1024)
-        val offset = 0L
+        var offset = 0L
         val input = resolver.openInputStream(picked.uri) ?: error("Cannot open ${picked.name}")
         //my fuckass cat stepped on my keyboared AGAIN
 
