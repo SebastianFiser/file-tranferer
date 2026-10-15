@@ -28,6 +28,7 @@ import android.content.ContentResolver
 import kotlinx.coroutines.delay
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 import org.dpdns.sebastianfiser.filetransferer.files.queryFile
+import org.dpdns.sebastianfiser.filetransferer.protocol.ErrorData
 
 //why isnt hackatime tracking
 private const val TAG = "TransferClient"

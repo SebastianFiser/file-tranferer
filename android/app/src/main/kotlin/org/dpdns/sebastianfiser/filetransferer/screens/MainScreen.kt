@@ -36,6 +36,7 @@ fun MainScreen(transferClient: TransferClient) {
             } catch (e: Exception) {
                 Log.e("MainScreen", "transfer failed", e)
             }
+        }
     }
 
     Column(
