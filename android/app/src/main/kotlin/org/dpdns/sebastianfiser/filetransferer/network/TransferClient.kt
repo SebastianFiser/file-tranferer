@@ -26,7 +26,8 @@ import java.nio.ByteOrder
 import org.dpdns.sebastianfiser.filetransferer.protocol.RequestFilesData
 import android.content.ContentResolver
 import kotlinx.coroutines.delay
-import org.dpdns.sebastianfisr.filetransferer.files.PickedFile
+import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
+import org.dpdns.sebastianfiser.filetransferer.files.queryFiles
 
 //why isnt hackatime tracking
 private const val TAG = "TransferClient"
@@ -208,7 +209,7 @@ class TransferClient(
                 val flags = if (isLast) FLAG_LAST else 0
                 while (ws.queueSize() > 4L * 1024 * 1024) delay(10)
                 ws.send(buildChunk(fileId, offset, flags, buffer.copyOf(n)).toByteString())
-                offset =+ n
+                offset += n
             }
         }
     }
