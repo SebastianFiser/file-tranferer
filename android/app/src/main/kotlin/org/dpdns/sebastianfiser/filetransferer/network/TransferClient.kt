@@ -35,12 +35,16 @@ class TransferClient(
     private val client = OkHttpClient()
     private var webSocket: WebSocket? = null
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Envelope>>()
+    @Volatile private var ready = CompletableDeferred<Unit>()
 
     private val serverMessages = Channel<Envelope>(Channel.UNLIMITED)
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    private val offered = ConcurrentHashMap<String, PickedFile>()
+
     fun connect(url: String) {
+        ready = CompletableDeferred()
         val request = Request.Builder().url(url).build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -61,10 +65,12 @@ class TransferClient(
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val envelope = Json.decodeFromString<Envelope>(text)
+                if(envelope.type == "hello_ack") ready.complete(Unit)
                 val waiter = pending[envelope.id]
                 if (waiter != null) {
                     waiter.complete(envelope)
                 } else {
+                    Log.d("TransferClient", "server-initiated: ${envelope.type}")
                     serverMessages.trySend(envelope)
                 }
             }
@@ -149,6 +155,58 @@ class TransferClient(
             val data = ByteArray(file.size.toInt())
             val chunk = buildChunk(id, 0L, FLAG_LAST, data)
             ws.send(chunk.toByteString())
+        }
+    }
+
+    suspend fun sendPickedFiles(resolver: ContentResolver, picked: List<PickedFile>) {
+        withTimeout(5000) { ready.await() }
+        offered.clear()
+        val infos = picked.mapIndexed { i, p ->
+            val id = "f{i + 1}"
+            offered[id] = p
+            FileInfo(p.name.substringAfterLast('/'), p.size, id)
+        }
+
+        val ack = sendOfferFiles(infos)
+        Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}" )
+
+        val req = awaitServerMessage("request_files")
+        val wanted = Json.decodeFromJsonElement<RequestFilesData>(req.data)
+
+        for (id in wanted.fileIds) {
+            val file = offered[id] ?: error("Server asked for unknown file $id")
+            sendfile(resolver, file, id)
+        }
+
+        val done = awaitServerMessage("transfer_complete)
+            Log.d("TransferClient",  "server says:  ${done.type} ${done.data}")
+    }
+
+//i genuenlymlove macondo, thanks to them i have thing at age i could never afford :)
+
+    private suspend fun sendFile(resolver: ContentResolver, picked: PickedFile, fileId: String) {
+        val ws = webSocket ?: error("Not connected)
+
+        if (picked.size == 0L) {
+            ws.send(buildChunk(fileId, 0L, FLAG_LAST, ByteArray(0)).toByteString())
+            return
+        }
+
+        val buffer = ByteArray(64 * 1024)
+        val offset = 0L
+        val input = resolver.openInputStream(picked.uri) ?: error("Cannot open ${picked.name}")
+        //my fuckass cat stepped on my keyboared AGAIN
+
+        input.use {
+            while(true) {
+                val n = it.read(buffer)
+                if (n <= 0) break
+                val isLast = offset + n == picked.size
+                val flags = if (isLast) FLAG_LAST else 0
+                while (ws.queueSize() > 4L * 1024 * 1024) delay(10)
+                ws.send(buildChunk(fileId, offset, flags, buffer.copyOf(n)).toByteString())
+                offset =+ n
+            }
         }
     }
 

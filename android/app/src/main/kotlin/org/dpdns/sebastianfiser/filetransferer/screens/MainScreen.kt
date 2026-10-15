@@ -11,21 +11,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCorutineScope
+import kotlinx.coroutines.launch
 
+import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 import org.dpdns.sebastianfiser.filetransferer.files.queryFile
 
 @Composable
-fun MainScreen() {
+fun MainScreen(client: TransferClient) {
     val context = LocalContext.current
+    val scope = rememberCorutineScope()
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
-        uris.forEach { uri ->
-            val picked = queryFile(context.contentResolver, uri)
-            Log.d("Mainscreen", "picked: $picked")
+        val picked = uris.mapNotNull { queryFile(context.contentResolver, it) }
+        if(picked.size < uris.size) {
+            Log.w("MainScreen", "some files have an unknown size")
         }
+        scope.launch { client.sendPickedFiles(context.contentResolver, picked ) }
     }
 
     Column(
@@ -33,6 +38,10 @@ fun MainScreen() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Button(onClick = { transferClient.connect("ws://192.168.1.75:5000/ws") }) {
+            Text("Connect")
+        }
+
         Button(onClick = { picker.launch(arrayOf("*/*")) }) {
             Text("select files")
         }
