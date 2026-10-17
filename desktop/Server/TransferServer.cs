@@ -184,7 +184,7 @@ public class TransferServer
             }
             catch (WebSocketException ex)
             {
-                Console.WriteLine("Client crashed: {ex.Message");
+                Console.WriteLine("Client crashed: ${ex.Message}");
             }
             catch (OperationCanceledException)
             {

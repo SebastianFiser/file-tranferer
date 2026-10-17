@@ -33,7 +33,7 @@ import org.dpdns.sebastianfiser.filetransferer.protocol.ErrorData
 //why isnt hackatime tracking
 private const val TAG = "TransferClient"
 const val FLAG_LAST = 0x01
-
+// Flag_last not integrated on server, once a whole batch arrives, connection closes
 class TransferClient(
     private val deviceName: String
 ) {
@@ -71,8 +71,15 @@ class TransferClient(
                 }
             }
 
+            override fun onClosing(wenSocket: WebSocket, code: Int, reason: Streak) {
+                Log.d("TransferClient", "onClosing code $code reason $reason")
+            } // lets lock in
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                //lemme make a coffee first chat
+                Log.d("TransferClient", "onClosed code=$code reason=$reason")
+            }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "error", t)
+                Log.e("TransferClient", "onFailiure", t)
             }
         })
     }
@@ -120,7 +127,7 @@ class TransferClient(
     }
 
     suspend fun awaitServerMessage(type: String, timeoutMs: Long = 5000): Envelope =
-        withTimeout(timeoutMs) {
+        withTimeout(timeoutMs) { //<- its this ahole i knew it
             var msg = serverMessages.receive() //HAHAHAH it compiled!
             while(msg.type != type) msg = serverMessages.receive()//lowk lock in
             msg//i would like to watch a movie but i cant find it lowk
@@ -160,13 +167,14 @@ class TransferClient(
     }
 
     suspend fun sendPickedFiles(resolver: ContentResolver, picked: List<PickedFile>) {
-        withTimeout(5000) { ready.await() }
+        withTimeout(5000) { ready.await() } // <- this lil bitchass is closing my webhsocket
         offered.clear()
         val infos = picked.mapIndexed { i, p ->
-            val id = "f{i + 1}"
+            val id = "${i + 1}"
             offered[id] = p
             FileInfo(p.name.substringAfterLast('/'), p.size, id)
         }
+
 
         val ack = sendOfferFiles(infos)
         Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}" )
@@ -179,7 +187,11 @@ class TransferClient(
             sendFile(resolver, file, id)
         }
 
-        val done = awaitServerMessage("transfer_complete")
+        if (webSocket.queueSize() != 0) delay(10)
+        val totalBytes = wanted.fileIds.sumOf { id -> offered[id]?.size ?: 0L }
+        val timeoutMs: Long = calscTimeoutMs(totalBytes)
+
+        val done = awaitServerMessage("transfer_complete", timeoutMs)
             Log.d("TransferClient",  "server says:  ${done.type} ${done.data}")
     }
 
@@ -203,12 +215,20 @@ class TransferClient(
                 val n = it.read(buffer)
                 if (n <= 0) break
                 val isLast = offset + n == picked.size
-                val flags = if (isLast) FLAG_LAST else 0
+                val flags = if (isLast) FLAG_LAST else 0 //hmmm, this is weird
                 while (ws.queueSize() > 4L * 1024 * 1024) delay(10)
-                ws.send(buildChunk(fileId, offset, flags, buffer.copyOf(n)).toByteString())
+                var ret = ws.send(buildChunk(fileId, offset, flags, buffer.copyOf(n)).toByteString())
+                Log.d("TransferClient", "send returned $ret")
                 offset += n
             }
         }
+    }
+
+    private fun calscTimeoutMs(totalBytes: Long): Long {
+        val TimeoutBaseMs = 5_000L
+        val BytesPerBase = 1 * 1024L * 1024L  //this will prolly ba aight
+
+        return TimeoutBaseMs + totalBytes * 1000L / BytesPerBase
     }
 
 }
