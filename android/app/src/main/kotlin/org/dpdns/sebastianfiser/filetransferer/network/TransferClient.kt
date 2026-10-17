@@ -168,6 +168,7 @@ class TransferClient(
 
     suspend fun sendPickedFiles(resolver: ContentResolver, picked: List<PickedFile>) {
         withTimeout(5000) { ready.await() } // <- this lil bitchass is closing my webhsocket
+        val ws = webSocket?
         offered.clear()
         val infos = picked.mapIndexed { i, p ->
             val id = "${i + 1}"
@@ -187,7 +188,7 @@ class TransferClient(
             sendFile(resolver, file, id)
         }
 
-        if (webSocket?.queueSize() > 0) delay(10)
+        if (ws.queueSize() > 0) delay(10)
         val totalBytes = wanted.fileIds.sumOf { id -> offered[id]?.size ?: 0L }
         val timeoutMs: Long = calscTimeoutMs(totalBytes)
 
