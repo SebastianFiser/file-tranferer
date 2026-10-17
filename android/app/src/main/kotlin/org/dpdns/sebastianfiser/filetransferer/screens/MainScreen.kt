@@ -44,7 +44,7 @@ fun MainScreen(transferClient: TransferClient) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Button(onClick = { transferClient.connect("ws://192.168.1.75:5000/ws") }) {
+        Button(onClick = { transferClient.connect("ws://192.168.1.72:5000/ws") }) {
             Text("Connect")
         }
 
