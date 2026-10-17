@@ -168,7 +168,7 @@ class TransferClient(
 
     suspend fun sendPickedFiles(resolver: ContentResolver, picked: List<PickedFile>) {
         withTimeout(5000) { ready.await() } // <- this lil bitchass is closing my webhsocket
-        val ws = webSocket?
+        val ws = webSocket
         offered.clear()
         val infos = picked.mapIndexed { i, p ->
             val id = "${i + 1}"
