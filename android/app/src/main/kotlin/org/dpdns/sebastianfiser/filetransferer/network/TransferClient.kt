@@ -71,7 +71,7 @@ class TransferClient(
                 }
             }
 
-            override fun onClosing(wenSocket: WebSocket, code: Int, reason: Streak) {
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d("TransferClient", "onClosing code $code reason $reason")
             } // lets lock in
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -187,7 +187,7 @@ class TransferClient(
             sendFile(resolver, file, id)
         }
 
-        if (webSocket.queueSize() != 0) delay(10)
+        if (webSocket.queueSize() > 0) delay(10)
         val totalBytes = wanted.fileIds.sumOf { id -> offered[id]?.size ?: 0L }
         val timeoutMs: Long = calscTimeoutMs(totalBytes)
 
