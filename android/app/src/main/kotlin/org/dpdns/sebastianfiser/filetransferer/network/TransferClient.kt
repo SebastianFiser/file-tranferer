@@ -187,7 +187,7 @@ class TransferClient(
             sendFile(resolver, file, id)
         }
 
-        if (webSocket.queueSize() > 0) delay(10)
+        if (webSocket?.queueSize() > 0) delay(10)
         val totalBytes = wanted.fileIds.sumOf { id -> offered[id]?.size ?: 0L }
         val timeoutMs: Long = calscTimeoutMs(totalBytes)
 
