@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 import org.dpdns.sebastianfiser.filetransferer.files.queryFile
+import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
 
 @Composable
 fun MainScreen(transferClient: TransferClient) {
@@ -48,7 +49,7 @@ fun MainScreen(transferClient: TransferClient) {
             scope.launch {
                 val server = ServerDiscovery(context).find()
                 val url = if (server != null) "ws://${server.host}:${server.port}/ws"
-                    else "ws://192.168.1.75:5000/ws"
+                else "ws://192.168.1.75:5000/ws"
                 transferClient.connect(url)
             }
         }) {

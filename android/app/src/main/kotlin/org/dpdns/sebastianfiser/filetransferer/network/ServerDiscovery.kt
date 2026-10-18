@@ -3,8 +3,8 @@ package org.dpdns.sebastianfiser.filetransferer.network
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
-import android.util.log
-import kotlinx.coroutines.suspendCancellableRoutine
+import android.util.Log
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
@@ -55,7 +55,7 @@ class ServerDiscovery(context: Context) {
                 }
 
                 override fun onServiceFound(info: NsdServiceInfo) {
-                    Log.d(TAG, "found=${info.serviceName}, type=${info.ServiceType}")
+                    Log.d(TAG, "found=${info.serviceName}, type=${info.serviceType}")
 
                     if (info.serviceType.trimEnd('.') == SERVICE_TYPE) {
                         nsd.resolveService(info, newResolveListener())
@@ -70,11 +70,11 @@ class ServerDiscovery(context: Context) {
                     Log.d(TAG, "discovery stopped: $serviceType")
                 }
 
-                override fun onStartDiscoveryFailed(serviceType: String, errorCode) {
+                override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                     Log.e(TAG, "start failed, code=$errorCode")
                     running.set(false)
                     if (cont.isActive) {
-                        cont.resumeWithException(IllegalStarteException("NSD start failed: $errorCode"))
+                        cont.resumeWithException(IllegalStateException("NSD start failed: $errorCode"))
 
                     }
                 }
