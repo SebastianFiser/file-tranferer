@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Buffers.Binary;
 using System.IO;
 using System.Security.Cryptography;
+using Makaretu.Dns;
 
 
 namespace desktop.Server;
@@ -25,6 +26,8 @@ public class TransferServer
 
     private const int MaxBatchFiles = 500;
     private const long MaxBatchBytes = 64L * 1024 * 1024;
+
+    private ServiceDiscovery? _sd;
 
     public async Task StartAsync()
     {
@@ -204,10 +207,17 @@ public class TransferServer
         });
 
         await _app.StartAsync();
+
+        var profile = new ServiceProfile(Environment.MachineName, "_filetransferer._tcp", 5000);
+        _sd = new ServiceDiscovery();
+        _sd.Advertise(profile);
     }
 
     public async Task StopAsync()
     {
+        _sd?.Dispose();
+        _sd = null;
+
         if (_app != null)
         {
             await _app.StopAsync();

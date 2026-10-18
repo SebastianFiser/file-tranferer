@@ -27,12 +27,12 @@ fun MainScreen(transferClient: TransferClient) {
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         val picked = uris.mapNotNull { queryFile(context.contentResolver, it) }
-        if(picked.size < uris.size) {
+        if (picked.size < uris.size) {
             Log.w("MainScreen", "some files have an unknown size")
         }
         scope.launch {
             try {
-                transferClient.sendPickedFiles(context.contentResolver, picked )
+                transferClient.sendPickedFiles(context.contentResolver, picked)
             } catch (e: Exception) {
                 Log.e("MainScreen", "transfer failed", e)
             }
@@ -44,12 +44,19 @@ fun MainScreen(transferClient: TransferClient) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Button(onClick = { transferClient.connect("ws://192.168.1.72:5000/ws") }) {
+        Button(onClick = {
+            scope.launch {
+                val server = ServerDiscovery(context).find()
+                val url = if (server != null) "ws://${server.host}:${server.port}/ws"
+                    else "ws://192.168.1.75:5000/ws"
+                transferClient.connect(url)
+            }
+        }) {
             Text("Connect")
         }
 
         Button(onClick = { picker.launch(arrayOf("*/*")) }) {
-            Text("select files")
+            Text("select files") //MY WRETARSTED why arent my lsps running
         }
     }
 }
