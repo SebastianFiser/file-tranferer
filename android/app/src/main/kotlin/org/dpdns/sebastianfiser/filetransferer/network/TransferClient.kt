@@ -33,6 +33,7 @@ import org.dpdns.sebastianfiser.filetransferer.protocol.ErrorData
 //why isnt hackatime tracking
 private const val TAG = "TransferClient"
 const val FLAG_LAST = 0x01
+
 // Flag_last not integrated on server, once a whole batch arrives, connection closes
 class TransferClient(
     private val deviceName: String
@@ -40,7 +41,8 @@ class TransferClient(
     private val client = OkHttpClient()
     private var webSocket: WebSocket? = null
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Envelope>>()
-    @Volatile private var ready = CompletableDeferred<Unit>()
+    @Volatile
+    private var ready = CompletableDeferred<Unit>()
 
     private val serverMessages = Channel<Envelope>(Channel.UNLIMITED)
 
@@ -55,13 +57,15 @@ class TransferClient(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 sendHello(deviceName)
 
-                Log.d("TransferClient", buildChunk("f1", 0, FLAG_LAST, ByteArray(10)).joinToString(" ") { "%02x".format(it) })
+                Log.d(
+                    "TransferClient",
+                    buildChunk("f1", 0, FLAG_LAST, ByteArray(10)).joinToString(" ") { "%02x".format(it) })
 
             }// COMPILE YOU DUMB THING
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val envelope = Json.decodeFromString<Envelope>(text)
-                if(envelope.type == "hello_ack") ready.complete(Unit)
+                if (envelope.type == "hello_ack") ready.complete(Unit)
                 val waiter = pending[envelope.id]
                 if (waiter != null) {
                     waiter.complete(envelope)
@@ -74,10 +78,12 @@ class TransferClient(
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d("TransferClient", "onClosing code $code reason $reason")
             } // lets lock in
+
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 //lemme make a coffee first chat
                 Log.d("TransferClient", "onClosed code=$code reason=$reason")
             }
+
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e("TransferClient", "onFailiure", t)
             }
@@ -111,7 +117,7 @@ class TransferClient(
         return ack
     }
 
-    suspend fun request(type: String, data: JsonElement, timeoutMs: Long = 5000): Envelope  {
+    suspend fun request(type: String, data: JsonElement, timeoutMs: Long = 5000): Envelope {
         val id = UUID.randomUUID().toString()
         val waiter = CompletableDeferred<Envelope>()
         pending[id] = waiter
@@ -129,7 +135,7 @@ class TransferClient(
     suspend fun awaitServerMessage(type: String, timeoutMs: Long = 5000): Envelope =
         withTimeout(timeoutMs) { //<- its this ahole i knew it
             var msg = serverMessages.receive() //HAHAHAH it compiled!
-            while(msg.type != type) msg = serverMessages.receive()//lowk lock in
+            while (msg.type != type) msg = serverMessages.receive()//lowk lock in
             msg//i would like to watch a movie but i cant find it lowk
         }
 
@@ -178,7 +184,7 @@ class TransferClient(
 
 
         val ack = sendOfferFiles(infos)
-        Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}" )
+        Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}")
 
         val req = awaitServerMessage("request_files")
         val wanted = Json.decodeFromJsonElement<RequestFilesData>(req.data)
@@ -193,7 +199,7 @@ class TransferClient(
         val timeoutMs: Long = calscTimeoutMs(totalBytes)
 
         val done = awaitServerMessage("transfer_complete", timeoutMs)
-            Log.d("TransferClient",  "server says:  ${done.type} ${done.data}")
+        Log.d("TransferClient", "server says:  ${done.type} ${done.data}")
     }
 
     //i genuenlymlove macondo, thanks to them i have thing at age i could never afford :)
@@ -212,7 +218,7 @@ class TransferClient(
         //my fuckass cat stepped on my keyboared AGAIN
 
         input.use {
-            while(true) {
+            while (true) {
                 val n = it.read(buffer)
                 if (n <= 0) break
                 val isLast = offset + n == picked.size

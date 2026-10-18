@@ -18,8 +18,9 @@ namespace desktop.Server;
 public class TransferServer
 {
     private WebApplication? _app;
+    private int _port;
     private const int _maxFileCount = 10000;
-    private const long _maxTotalSize = 50L * 1024 * 1024;
+    private const long _maxTotalSize = 20L * 1024 * 1024 * 1024;
 
     static readonly string _basePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     static readonly string _appPath = Path.Combine(_basePath, "file-transferer");
@@ -29,19 +30,18 @@ public class TransferServer
 
     private ServiceDiscovery? _sd;
 
-    public async Task StartAsync()
+    private async Task StartOnPortAsync(int port)
     {
-
         var builder = WebApplication.CreateBuilder();
-        builder.WebHost.UseUrls("http://0.0.0.0:5000");
+        builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
         Directory.CreateDirectory(_appPath);
 
 
-        _app = builder.Build();
+        var app = builder.Build();
 
-        _app.UseWebSockets();
+        app.UseWebSockets();
 
-        _app.Map("/ws", async context =>
+        app.Map("/ws", async context =>
         {
             if (!context.WebSockets.IsWebSocketRequest)
             {
@@ -51,7 +51,8 @@ public class TransferServer
             using var ws = await context.WebSockets.AcceptWebSocketAsync();
             var buffer = new byte[8];
             var state = new ConnectionState();
-            var options = new JsonSerializerOptions {
+            var options = new JsonSerializerOptions
+            {
                 PropertyNameCaseInsensitive = true,
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             };
@@ -66,14 +67,15 @@ public class TransferServer
                     do
                     {
                         result = await ws.ReceiveAsync(buffer, CancellationToken.None);
-                        if (result.MessageType == WebSocketMessageType.Close) {
+                        if (result.MessageType == WebSocketMessageType.Close)
+                        {
                             await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
                             return;
                         }
                         ms.Write(buffer, 0, result.Count);
                     }
                     while (!result.EndOfMessage);
-//why you aint working wro
+                    //why you aint working wro
 
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
@@ -81,7 +83,7 @@ public class TransferServer
                     }
                     if (result.MessageType == WebSocketMessageType.Binary)
                     {
-                        if ( state.TransferId == null )
+                        if (state.TransferId == null)
                         {
                             await SendAsync(ws, MakeError("0", "invalid_process", "binary isnt accepted if no transfer is in progress"), options);
                             break;
@@ -89,7 +91,8 @@ public class TransferServer
 
                         byte[] frame = ms.ToArray();
                         bool ok = TryParseChunk(frame, out var fileId, out var offset, out var flags, out var dataStart);
-                        if (ok == false) {
+                        if (ok == false)
+                        {
                             await SendAsync(ws, MakeError("0", "invalid_binary", "parsing of this binary frame failed, please send valid data"), options);
                             break;
                         }
@@ -160,7 +163,7 @@ public class TransferServer
                         await SendAsync(ws, MakeError("0", "invalid_message", "invalid message"), options);
                         continue;
                     }
-                    if(!state.HandshakeDone && msg.Type != "hello")
+                    if (!state.HandshakeDone && msg.Type != "hello")
                     {
                         await SendAsync(ws, MakeError(msg.Id, "handshake_required", "send hello first"), options);
                         continue;
@@ -168,7 +171,8 @@ public class TransferServer
                     switch (msg.Type) //i just want to sleep my friend.
                     {
                         case "hello":
-                            if (state.HandshakeDone) {
+                            if (state.HandshakeDone)
+                            {
                                 await SendAsync(ws, MakeError(msg.Id, "already_handshaken", "handshake already done"), options);
                                 continue;
                             }
@@ -196,7 +200,8 @@ public class TransferServer
             finally
             {
                 Console.WriteLine("Connection closed, cleaning up");
-                foreach (var f in state.Files.Values) {
+                foreach (var f in state.Files.Values)
+                {
                     if (f.Stream != null)
                     {
                         await f.Stream.DisposeAsync();
@@ -206,9 +211,30 @@ public class TransferServer
             }
         });
 
-        await _app.StartAsync();
+        try
+        {
+            await app.StartAsync();
+        }
+        catch
+        {
+            await app.DisposeAsync();
+            throw;
+        }
 
-        var profile = new ServiceProfile(Environment.MachineName, "_filetransferer._tcp", 5000);
+        _app = app;
+        _port = new Uri(app.Urls.First()).Port;
+        Console.WriteLine($"Listening on {string.Join(", ", app.Urls)}");
+
+    }
+
+    public async Task StartAsync()
+    {
+
+        try { await StartOnPortAsync(5000); }
+        catch (IOException) { await StartOnPortAsync(0); }
+
+        ushort ushortPort = (ushort)_port;
+        var profile = new ServiceProfile(Environment.MachineName, "_filetransferer._tcp", ushortPort);
         _sd = new ServiceDiscovery();
         _sd.Advertise(profile);
     }
@@ -239,11 +265,13 @@ public class TransferServer
         dataStart = 0;
 
 
-        if (frame.Length < 1) {
+        if (frame.Length < 1)
+        {
             return false;
         }
         var idLen = frame[0];
-        if (idLen == 0 || frame.Length < 1 + idLen + 8 + 1) {
+        if (idLen == 0 || frame.Length < 1 + idLen + 8 + 1)
+        {
             return false;
         }
 
@@ -254,7 +282,7 @@ public class TransferServer
 
         fileId = Encoding.UTF8.GetString(frame.Slice(idStart, idLen));
         offset = BinaryPrimitives.ReadInt64BigEndian(frame.Slice(offsetStart, 8));
-        flags =  frame[flagsIndex];
+        flags = frame[flagsIndex];
 
         return true;
     }
@@ -299,22 +327,24 @@ public class TransferServer
 
         Console.WriteLine($"device_name: {state.DeviceName}");
         Console.WriteLine($"device_path: {state.DevicePath}");
-        var data = JsonSerializer.SerializeToElement(new { server_name = "PC", protocol_version = 1});
+        var data = JsonSerializer.SerializeToElement(new { server_name = "PC", protocol_version = 1 });
         var reply = new Message(msg.Id, "hello_ack", data);
         await SendAsync(ws, reply, options);
         return true;
     }
 
-//time to rock today lowk
+    //time to rock today lowk
 
     private static async Task HandleOfferFilesAsync(WebSocket ws, Message msg, JsonSerializerOptions options, ConnectionState state)
     {
 
-        if (!state.HandshakeDone) {
+        if (!state.HandshakeDone)
+        {
             await SendAsync(ws, MakeError(msg.Id, "handshake_required", "send hello first"), options);
             return;
         }
-        if (state.TransferId != null) {
+        if (state.TransferId != null)
+        {
             await SendAsync(ws, MakeError(msg.Id, "transfer_in_progress", "a transfer is already in progress"), options);
             return;
         }
@@ -340,7 +370,7 @@ public class TransferServer
 
         var files = new Dictionary<string, FileTransferState>();
 
-        foreach ( var file in msg.Data.GetProperty("files").EnumerateArray())
+        foreach (var file in msg.Data.GetProperty("files").EnumerateArray())
         {
             var relativePath = file.GetProperty("relative_path").GetString();
             var fileId = file.GetProperty("file_id").GetString();
@@ -354,7 +384,7 @@ public class TransferServer
                 return;
             }
 
-            var isEmpty =  size == 0;
+            var isEmpty = size == 0;
 
             if (isEmpty)
             {
@@ -454,7 +484,8 @@ public class TransferServer
         return new Message("s_" + Guid.NewGuid().ToString("N"), "request_files", data);
     }
 
-    private static long CalculateSize(JsonElement data) {
+    private static long CalculateSize(JsonElement data)
+    {
         long total = 0;
         foreach (var file in data.GetProperty("files").EnumerateArray())
         {
@@ -470,13 +501,13 @@ public class TransferServer
             return new ValidationError("invalid_data", "data must be an object");
 
 
-        if( !data.TryGetProperty("files", out var files)
+        if (!data.TryGetProperty("files", out var files)
             || files.ValueKind != JsonValueKind.Array)
         {
             return new ValidationError("invalid_data", "files must be an array");
         }
 
-        if(files.GetArrayLength() > _maxFileCount)
+        if (files.GetArrayLength() > _maxFileCount)
             return new ValidationError("file_count_too_high", "file count must be less than or equal to " + _maxFileCount);
 
         long total = 0;
@@ -491,7 +522,7 @@ public class TransferServer
             if (file.ValueKind != JsonValueKind.Object)
                 return new ValidationError("invalid_data", $"files must be an array of objects at index {i}");
 
-            if ( !file.TryGetProperty("relative_path", out var rp)
+            if (!file.TryGetProperty("relative_path", out var rp)
                 || rp.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(rp.GetString()))
                 return new ValidationError("invalid_filepath", $"relative_path must be a string at index {i}");
 
@@ -506,7 +537,8 @@ public class TransferServer
                 return new ValidationError("invalid_path", $"relative_path is unsafe at index {i}");
             }
 
-            if (!relativePathHash.Add(path)) {
+            if (!relativePathHash.Add(path))
+            {
                 return new ValidationError("duplicate_path", $"duplicate relative path at index {i}");
             }
 
@@ -531,10 +563,10 @@ public class TransferServer
 
             var id = fileId.GetString()!;
 
-            if (!fileIdHash.Add(id)) {
+            if (!fileIdHash.Add(id))
+            {
                 return new ValidationError("duplicate_id", $"duplicate file id at index {i}");
             }
-
 
 
         }
