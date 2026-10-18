@@ -140,6 +140,7 @@ public class TransferServer
                             file.Stream = null;
                             File.Move(partPath, file.TargetPath, overwrite: true);
                             await CompleteIfDoneAsync(ws, options, state);
+                            Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} file {fileId} finalized");
 
                         }
 
@@ -289,6 +290,7 @@ public class TransferServer
 
     private static Message MakeTransferComplete(string transferId, ConnectionState state)
     {
+
         var hashes = state.Files.Select(kv => new { file_id = kv.Key, sha256 = kv.Value.Sha256 }).ToList();
 
         var data = JsonSerializer.SerializeToElement(new
@@ -296,6 +298,8 @@ public class TransferServer
             transfer_id = transferId,
             hash = hashes
         });
+
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} sending transfer_complete");
 
         return new Message("0", "transfer_complete", data);
     }
@@ -418,6 +422,7 @@ public class TransferServer
         {
             var transferId = state.TransferId!;
             await SendAsync(ws, MakeTransferComplete(transferId, state), options);
+            Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}, last cunk of {transferId} received");
             state.TransferId = null;
             state.Files = new Dictionary<string, FileTransferState>();
         }

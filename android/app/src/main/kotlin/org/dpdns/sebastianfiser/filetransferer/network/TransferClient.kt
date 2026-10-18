@@ -41,6 +41,7 @@ class TransferClient(
     private val client = OkHttpClient()
     private var webSocket: WebSocket? = null
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Envelope>>()
+
     @Volatile
     private var ready = CompletableDeferred<Unit>()
 
@@ -170,6 +171,7 @@ class TransferClient(
             val chunk = buildChunk(id, 0L, FLAG_LAST, data)
             ws.send(chunk.toByteString())
         }
+        Log.d("TransferClient", "all chunks qeued")
     }
 
     suspend fun sendPickedFiles(resolver: ContentResolver, picked: List<PickedFile>) {
@@ -195,9 +197,11 @@ class TransferClient(
         }
 
         if (ws.queueSize() > 0) delay(10)
+        Log.d("TransferServer", "Qeuse drained")
         val totalBytes = wanted.fileIds.sumOf { id -> offered[id]?.size ?: 0L }
         val timeoutMs: Long = calscTimeoutMs(totalBytes)
 
+        Log.d("TransferServer", "waiting for transfer complete wioth timneout $timeoutMs")
         val done = awaitServerMessage("transfer_complete", timeoutMs)
         Log.d("TransferClient", "server says:  ${done.type} ${done.data}")
     }
