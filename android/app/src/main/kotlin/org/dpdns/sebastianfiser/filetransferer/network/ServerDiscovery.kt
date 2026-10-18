@@ -36,7 +36,7 @@ class ServerDiscovery(context: Context) {
                 }
             }
 
-            fun newResolverListener() = object : NsdManager.ResolveListener {
+            fun newResolveListener() = object : NsdManager.ResolveListener {
                 override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {
                     Log.w(TAG, "resolve failed: ${info.serviceName}, code=$errorCode")
                 }
