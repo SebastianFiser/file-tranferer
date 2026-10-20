@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class viewModel(application: Application) : AndroidViewModel(application) {
-    private val _uiState = MutableStateFlow<TransferUiState>(TransferUiSTate.Idle)
+    //holds app states and variables that have to survive recompose of screens
+
+    private val _uiState = MutableStateFlow<TransferUiState>(TransferUiState.Idle)
     val uiState: StateFlow<TransferUiState> = _uiState.asStateFlow()
 }
