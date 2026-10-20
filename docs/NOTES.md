@@ -26,3 +26,7 @@ today, my files send like files, but not ll the files even tho my files are the 
 
 
 #17.10 over thiss weekend i have to catch up what i had not managed to fiinsih, were like 6 hrs behind, so like do 4.5 today?
+
+
+#20.10
+idk what to do anymore its super late i have still school and everathing takes so much time. dont get me wrong i love coding but like theres no time for it
