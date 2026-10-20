@@ -66,6 +66,7 @@ class TransferClient(
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val envelope = Json.decodeFromString<Envelope>(text)
+                Log.d("TransferServer", "onMessage ${envelope.type}")
                 if (envelope.type == "hello_ack") ready.complete(Unit)
                 val waiter = pending[envelope.id]
                 if (waiter != null) {
@@ -83,10 +84,12 @@ class TransferClient(
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 //lemme make a coffee first chat
                 Log.d("TransferClient", "onClosed code=$code reason=$reason")
+                serverMessages.close()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e("TransferClient", "onFailiure", t)
+                serverMessages.close()
             }
         })
     }

@@ -96,6 +96,9 @@ public class TransferServer
                             await SendAsync(ws, MakeError("0", "invalid_binary", "parsing of this binary frame failed, please send valid data"), options);
                             break;
                         }
+                        if (offset == 0) {
+                            Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} first chunk arrived");
+                        }
 
                         var data = frame.AsMemory(dataStart);
 
@@ -421,8 +424,8 @@ public class TransferServer
         if (state.Files.Values.All(f => f.BytesRecived >= f.Size))
         {
             var transferId = state.TransferId!;
-            await SendAsync(ws, MakeTransferComplete(transferId, state), options);
             Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}, last cunk of {transferId} received");
+            await SendAsync(ws, MakeTransferComplete(transferId, state), options);
             state.TransferId = null;
             state.Files = new Dictionary<string, FileTransferState>();
         }
