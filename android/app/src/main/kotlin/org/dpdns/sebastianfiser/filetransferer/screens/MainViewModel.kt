@@ -11,6 +11,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import android.os.Build
 import android.provider.Settings
+import android.net.Uri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
@@ -76,6 +79,42 @@ class viewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         closeClient()
+    }
+
+    fun sendFile(uris: List<Uri>) {
+        val c = client ?: return
+        if (_uiState.value is TransferUiState.Transferring) return
+
+        transferJob = viewModelScope.launch {
+            try {
+                val resolver = getApplication<Application>().contentResolver
+                val files = withContext(Dispatchers.IO) {
+                    uris.mapIndexed { i, uri ->
+                        resolver.query(uri, null, null, null, null)!!.use { cursor ->
+                            cursor.moveToFirst()
+                            val name = cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+                            val size = cursor.getLong(cursor.getColumnIndexOrThrow(OpenableColumns.SIZE))
+                            PickedFile(uri = uri, relativePath = name, size = size, fileId = (i + 1).toString())
+                        }
+                    }
+                }
+                val total = files.sumOf { it.size }
+                _uiState.value = TransferUiState.Transferring(0, total)
+                var lastUpdate = 0L
+                c.SendPickedFiles(getApplication<Application>().contentResolver, files) { sent ->
+                    val now = System.currentTimeMillis()
+                    if (now - lastUpdate > 100) {
+                        lastupdate = now_uiState.value = TransferUiState.Transferring(sent, total)
+                    }
+                }
+
+                _uiState.value = TransferUiState.Done
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = TransferUiState.Error(e.message ?: "unknown")
+            }
+        }
     }
 
 }

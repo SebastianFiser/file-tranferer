@@ -177,7 +177,8 @@ class TransferClient(
         Log.d("TransferClient", "all chunks qeued")
     }
 
-    suspend fun sendPickedFiles(resolver: ContentResolver, picked: List<PickedFile>) {
+    suspend fun sendPickedFiles(resolver: ContentResolver, picked: List<PickedFile>, onProgress: (Long) -> Unit) {
+        var sentTotal = 0L
         withTimeout(5000) { ready.await() } // <- this lil bitchass is closing my webhsocket
         val ws = webSocket ?: error("Not connected")
         offered.clear()
@@ -196,7 +197,10 @@ class TransferClient(
 
         for (id in wanted.fileIds) {
             val file = offered[id] ?: error("Server asked for unknown file $id")
-            sendFile(resolver, file, id)
+            sendFile(resolver, file, id) { n ->
+                sentTotal += n
+                onProgress(sentTotal)
+            }
         }
 
         if (ws.queueSize() > 0) delay(10)
@@ -211,7 +215,12 @@ class TransferClient(
 
     //i genuenlymlove macondo, thanks to them i have thing at age i could never afford :)
 
-    private suspend fun sendFile(resolver: ContentResolver, picked: PickedFile, fileId: String) {
+    private suspend fun sendFile(
+        resolver: ContentResolver,
+        picked: PickedFile,
+        fileId: String,
+        onBytes: (Int) -> Unit
+    ) {
         val ws = webSocket ?: error("Not connected")
 
         if (picked.size == 0L) {
@@ -234,6 +243,7 @@ class TransferClient(
                 var ret = ws.send(buildChunk(fileId, offset, flags, buffer.copyOf(n)).toByteString())
                 Log.d("TransferClient", "send returned $ret")
                 offset += n
+                onBytes(n)
             }
         }
     }

@@ -34,17 +34,7 @@ fun MainScreen(transferClient: TransferClient) {
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
-        val picked = uris.mapNotNull { queryFile(context.contentResolver, it) }
-        if (picked.size < uris.size) {
-            Log.w("MainScreen", "some files have an unknown size")
-        }
-        scope.launch {
-            try {
-                transferClient.sendPickedFiles(context.contentResolver, picked)
-            } catch (e: Exception) {
-                Log.e("MainScreen", "transfer failed", e)
-            }
-        }
+        if (uris.isNotEmpty()) vm.SendFiles(uris)
     }
 
     Column(
@@ -59,7 +49,17 @@ fun MainScreen(transferClient: TransferClient) {
             Text("Connect")
         }
 
-        Button(onClick = { picker.launch(arrayOf("*/*")) }) {
+        Button(
+            onClick = { vm.disconnect() },
+            enabled = state !is TransferUiState.Idle && state !is TransferUiState.Connecting
+        ) {
+            Text("disconnect")
+        }
+
+        Button(
+            onClick = { picker.launch(arrayOf("*/*")) },
+            enabled = state is TransferUiState.Connected || state is TransferUiState.Done
+        ) {
             Text("select files") //MY WRETARSTED why arent my lsps running
         }
 
@@ -68,7 +68,15 @@ fun MainScreen(transferClient: TransferClient) {
                 is TransferUiState.Idle -> "Not Connected"
                 is TransferUiState.Connecting -> "Connecting..."
                 is TransferUiState.Connected -> "Connected to ${s.deviceName}"
-                is TransferUiState.Transferring -> "${s.bytesSent} / ${s.totalBytes}"
+                is TransferUiState.Transferring -> {
+                    LinearProgressIndicator(
+                        progress = {
+                            if (s.totalBytes > 0) s.bytesSent.toFloat() / s.totalBytes else 0f
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
                 is TransferUiState.Done -> "done"
                 is TransferUiState.Error -> "Error: ${s.message}"
             }
