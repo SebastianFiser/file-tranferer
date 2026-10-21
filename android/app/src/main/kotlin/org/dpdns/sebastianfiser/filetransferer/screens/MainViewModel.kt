@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import android.os.Build
+import android.provider.Settings
 
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
@@ -21,6 +23,12 @@ class viewModel(application: Application) : AndroidViewModel(application) {
 
     private var client: TransferClient? = null
     private var transferJob: Job? = null
+
+    private val deviceName = "${Build.MODEL}[${
+        Settings.Secure.getString(
+            getApplication<Application>().contentResolver, Settings.Secure.ANDROID_ID
+        )
+    }]"
 
     fun connect() {
         if (_uiState.value is TransferUiState.Connecting ||
@@ -37,8 +45,8 @@ class viewModel(application: Application) : AndroidViewModel(application) {
                     ?: throw IllegalStateException("Server not found")
                 val Url = if (server != null) "ws://${server.host}:${server.port}/ws" else
                     "ws://192.168.0.116:5000/ws"
-                val c = TransferClient()
-                newClient = c
+                val c = TransferClient(deviceName)
+                client = c
                 c.connect(Url)
                 client = c
                 _uiState.value = TransferUiState.Connected(server?.host ?: "unknown")
