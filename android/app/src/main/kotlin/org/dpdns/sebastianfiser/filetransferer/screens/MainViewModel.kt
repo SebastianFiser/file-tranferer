@@ -21,7 +21,6 @@ class viewModel(application: Application) : AndroidViewModel(application) {
 
     private var client: TransferClient? = null
     private var transferJob: Job? = null
-    private var server = ServerDiscovery(application).find()
 
     fun connect() {
         if (_uiState.value is TransferUiState.Connecting ||
@@ -34,6 +33,8 @@ class viewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             var newClient: TransferClient? = null
             try {
+                val server = ServerDiscovery(application).find()
+                    ?: throw IllegalStateException("Server not found")
                 val Url = if (server != null) "ws:${server.host}:${server.port}/ws" else
                     "ws://192.168.0.116:5000/ws"
                 newClient.connect(Url)
