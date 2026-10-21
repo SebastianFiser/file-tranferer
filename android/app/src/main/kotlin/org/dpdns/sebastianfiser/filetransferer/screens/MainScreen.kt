@@ -14,20 +14,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 import org.dpdns.sebastianfiser.filetransferer.files.queryFile
 import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
+import org.dpdns.sebastianfiser.filetransferer.screens.viewModel
 
 @Composable
 fun MainScreen(transferClient: TransferClient) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val vm: MainViewModel = viewModel()
+    val vm: viewModel = viewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()
 
     val picker = rememberLauncherForActivityResult(
