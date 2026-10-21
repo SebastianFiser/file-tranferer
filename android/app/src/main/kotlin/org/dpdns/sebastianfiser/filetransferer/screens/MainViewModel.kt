@@ -33,8 +33,7 @@ class viewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             var newClient: TransferClient? = null
             try {
-                getApplication<Application>()
-                val server = ServerDiscovery(application).find()
+                val server = ServerDiscovery(getApplication<Application>()).find()
                     ?: throw IllegalStateException("Server not found")
                 val Url = if (server != null) "ws://${server.host}:${server.port}/ws" else
                     "ws://192.168.0.116:5000/ws"
@@ -42,7 +41,7 @@ class viewModel(application: Application) : AndroidViewModel(application) {
                 newClient = c
                 c.connect(Url)
                 client = c
-                _uiState.value = TransferUiState.Connected(deviceName = "TODO")
+                _uiState.value = TransferUiState.Connected(server?.host ?: "unknown")
             } catch (e: CancellationException) {
                 newClient?.close()
                 throw e
