@@ -13,6 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
 
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
@@ -23,6 +26,9 @@ import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
 fun MainScreen(transferClient: TransferClient) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    val vm: MainViewModel = viewModel()
+    val state by vm.uiState.collectAsStateWithLifecycle()
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -45,19 +51,26 @@ fun MainScreen(transferClient: TransferClient) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Button(onClick = {
-            scope.launch {
-                val server = ServerDiscovery(context).find()
-                val url = if (server != null) "ws://${server.host}:${server.port}/ws"
-                else "ws://192.168.1.75:5000/ws"
-                transferClient.connect(url)
-            }
-        }) {
+        Button(
+            onClick = { vm.connect() },
+            enabled = state is TransferUiState.Idle || state is TransferUiState.Error
+        ) {
             Text("Connect")
         }
 
         Button(onClick = { picker.launch(arrayOf("*/*")) }) {
             Text("select files") //MY WRETARSTED why arent my lsps running
         }
+
+        Text(
+            when (val s = state) {
+                is TransferUiState.Idle -> "Not Connected"
+                is TransferUiState.Connecting -> "Connecting..."
+                is TransferUiState.Connected -> "Connected to ${s.deviceName}"
+                is TransferUiState.Transferring -> "${s.bytesSent} / ${s.totalBytes}"
+                is TransferUiState.Done -> "done"
+                is TransferUiState.Error -> "Error: ${s.message}"
+            }
+        )
     }
 }
