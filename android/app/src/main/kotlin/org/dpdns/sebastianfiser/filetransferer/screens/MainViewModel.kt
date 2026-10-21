@@ -7,6 +7,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+
+import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 
 class viewModel(application: Application) : AndroidViewModel(application) {
     //holds app states and variables that have to survive recompose of screens
@@ -16,10 +20,11 @@ class viewModel(application: Application) : AndroidViewModel(application) {
 
     private var client: TransferClient? = null
     private var transferJob: Job? = null
+    private var server
 
     fun connect() {
         if (_uiState.value is TransferUiState.Connecting ||
-            _uiState.value is TransferUiState.connected
+            _uiState.value is TransferUiState.Connected
         ) {
             return
         }
@@ -28,12 +33,12 @@ class viewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             var newClient: TransferClient? = null
             try {
-                private val server = ServerDiscovery(application).find()
+                server = ServerDiscovery(application).find()
                 val Url = if (server != null) "ws:${server.host}:${server.port}/ws" else
                     "ws://192.168.0.116:5000/ws"
-                transferClient.connect(Url)
+                TransferClient.connect(Url)
                 client = newClient
-                _uiState.value = TransferUiState.Conected(deviceName = "TODO")
+                _uiState.value = TransferUiState.Connected(deviceName = "TODO")
             } catch (e: CancellationException) {
                 newClient?.close()
                 throw e
