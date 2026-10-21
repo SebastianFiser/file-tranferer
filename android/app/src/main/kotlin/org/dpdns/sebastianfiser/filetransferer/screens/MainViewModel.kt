@@ -13,4 +13,53 @@ class viewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow<TransferUiState>(TransferUiState.Idle)
     val uiState: StateFlow<TransferUiState> = _uiState.asStateFlow()
+
+    private var client: TransferClient? = null
+    private var transferJob: Job? = null
+
+    fun connect() {
+        if (_uiState.value is TransferUiState.Connecting ||
+            _uiState.value is TransferUiState.connected
+        ) {
+            return
+        }
+        _uiState.value = TransferUiState.Connecting
+
+        viewModelScope.launch {
+            var newClient: TransferClient? = null
+            try {
+                private val server = ServerDiscovery(application).find()
+                val Url = if (server != null) "ws:${server.host}:${server.port}/ws" else
+                    "ws://192.168.0.116:5000/ws"
+                transferClient.connect(Url)
+                client = newClient
+                _uiState.value = TransferUiState.Conected(deviceName = "TODO")
+            } catch (e: CancellationException) {
+                newClient?.close()
+                throw e
+            } catch (e: Exception) {
+                newClient?.close()
+                client = null
+                _uiState.value = TransferUiState.Error(e.message ?: "unknown")
+            }
+        }
+
+    }
+
+    fun disconnect() {
+        transferJob?.cancel()
+        transferJob = null
+        closeClient()
+        _uiState.value = TransferUiState.Idle
+    }
+
+    private fun closeClient() {
+        client?.close()
+        client = null
+    }
+
+    override fun onCleared() {
+        closeClient()
+    }
+
 }
