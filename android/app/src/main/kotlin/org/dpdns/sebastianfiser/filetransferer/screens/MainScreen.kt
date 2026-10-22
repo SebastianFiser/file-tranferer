@@ -64,8 +64,10 @@ fun MainScreen(transferClient: TransferClient) {
             Text("select files") //MY WRETARSTED why arent my lsps running
         }
 
+        val s = state
+
         Text(
-            when (val s = state) {
+            when (s) {
                 is TransferUiState.Idle -> "Not Connected"
                 is TransferUiState.Connecting -> "Connecting..."
                 is TransferUiState.Connected -> "Connected to ${s.deviceName}"
