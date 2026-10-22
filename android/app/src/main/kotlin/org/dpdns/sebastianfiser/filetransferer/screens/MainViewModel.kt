@@ -91,7 +91,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val resolver = getApplication<Application>().contentResolver
                 val files = withContext(Dispatchers.IO) {
-                    uris.mapIndexed { uri ->
+                    uris.mapIndexed { i, uri ->
                         resolver.query(uri, null, null, null, null)!!.use { cursor ->
                             cursor.moveToFirst()
                             val name = cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))

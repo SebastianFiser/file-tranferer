@@ -69,12 +69,11 @@ fun MainScreen(transferClient: TransferClient) {
                 is TransferUiState.Idle -> "Not Connected"
                 is TransferUiState.Connecting -> "Connecting..."
                 is TransferUiState.Connected -> "Connected to ${s.deviceName}"
-                is TransferUiState.Transferring -> "${bytesSent} / ${totalBytes}"
+                is TransferUiState.Transferring -> "${s.bytesSent} / ${s.totalBytes}"
                 is TransferUiState.Done -> "done"
                 is TransferUiState.Error -> "Error: ${s.message}"
             }
         )
-        val s = state
         if (s is TransferUiState.Transferring) {
             LinearProgressIndicator(
                 progress = { if (s.totalBytes > 0) s.bytesSent.toFloat() / s.totalBytes else 0f },
