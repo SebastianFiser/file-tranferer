@@ -91,12 +91,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val resolver = getApplication<Application>().contentResolver
                 val files = withContext(Dispatchers.IO) {
-                    uris.mapIndexed { i, uri ->
+                    uris.mapIndexed { uri ->
                         resolver.query(uri, null, null, null, null)!!.use { cursor ->
                             cursor.moveToFirst()
                             val name = cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
                             val size = cursor.getLong(cursor.getColumnIndexOrThrow(OpenableColumns.SIZE))
-                            PickedFile(uri = uri, relativePath = name, size = size, fileId = (i + 1).toString())
+                            PickedFile(uri = uri, relativePath = name, size = size)
                         }
                     }
                 }
