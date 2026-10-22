@@ -96,7 +96,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             cursor.moveToFirst()
                             val name = cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
                             val size = cursor.getLong(cursor.getColumnIndexOrThrow(OpenableColumns.SIZE))
-                            PickedFile(uri = uri, relativePath = name, size = size)
+                            PickedFile(uri = uri, name = name, size = size)
                         }
                     }
                 }

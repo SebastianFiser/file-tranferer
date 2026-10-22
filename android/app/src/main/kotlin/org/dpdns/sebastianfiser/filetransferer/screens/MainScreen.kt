@@ -35,7 +35,7 @@ fun MainScreen(transferClient: TransferClient) {
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) vm.sendFiles(uris)
+        if (uris.isNotEmpty()) vm.sendFile(uris)
     }
 
     Column(
@@ -78,7 +78,7 @@ fun MainScreen(transferClient: TransferClient) {
         if (s is TransferUiState.Transferring) {
             LinearProgressIndicator(
                 progress = { if (s.totalBytes > 0) s.bytesSent.toFloat() / s.totalBytes else 0f },
-                modifier = Modifeir.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
