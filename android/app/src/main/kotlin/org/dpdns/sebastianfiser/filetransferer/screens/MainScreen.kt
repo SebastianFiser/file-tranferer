@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
+import androidx.compose.material3.LinearProgressIndicator
 
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
@@ -34,7 +35,7 @@ fun MainScreen(transferClient: TransferClient) {
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) vm.SendFiles(uris)
+        if (uris.isNotEmpty()) vm.sendFiles(uris)
     }
 
     Column(

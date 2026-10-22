@@ -14,9 +14,11 @@ import android.provider.Settings
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.provider.OpenableColumns
 
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
+import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 
 class viewModel(application: Application) : AndroidViewModel(application) {
     //holds app states and variables that have to survive recompose of screens
@@ -101,10 +103,11 @@ class viewModel(application: Application) : AndroidViewModel(application) {
                 val total = files.sumOf { it.size }
                 _uiState.value = TransferUiState.Transferring(0, total)
                 var lastUpdate = 0L
-                c.SendPickedFiles(getApplication<Application>().contentResolver, files) { sent ->
+                c.sendPickedFiles(getApplication<Application>().contentResolver, files) { sent ->
                     val now = System.currentTimeMillis()
                     if (now - lastUpdate > 100) {
-                        lastupdate = now_uiState.value = TransferUiState.Transferring(sent, total)
+                        lastUpdate = now
+                        _uiState.value = TransferUiState.Transferring(sent, total)
                     }
                 }
 
