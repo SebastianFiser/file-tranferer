@@ -22,14 +22,14 @@ import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 import org.dpdns.sebastianfiser.filetransferer.files.queryFile
 import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
-import org.dpdns.sebastianfiser.filetransferer.screens.viewModel
+import org.dpdns.sebastianfiser.filetransferer.screens.MainViewModel
 
 @Composable
 fun MainScreen(transferClient: TransferClient) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val vm: viewModel = viewModel()
+    val vm: MainViewModel = viewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()
 
     val picker = rememberLauncherForActivityResult(
@@ -69,18 +69,17 @@ fun MainScreen(transferClient: TransferClient) {
                 is TransferUiState.Idle -> "Not Connected"
                 is TransferUiState.Connecting -> "Connecting..."
                 is TransferUiState.Connected -> "Connected to ${s.deviceName}"
-                is TransferUiState.Transferring -> {
-                    LinearProgressIndicator(
-                        progress = {
-                            if (s.totalBytes > 0) s.bytesSent.toFloat() / s.totalBytes else 0f
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
+                is TransferUiState.Transferring -> "${bytesSent} / ${totalBytes}"
                 is TransferUiState.Done -> "done"
                 is TransferUiState.Error -> "Error: ${s.message}"
             }
         )
+        val s = state
+        if (s is TransferUiState.Transferring) {
+            LinearProgressIndicator(
+                progress = { if (s.totalBytes > 0) s.bytesSent.toFloat() / s.totalBytes else 0f },
+                modifier = Modifeir.fillMaxWidth()
+            )
+        }
     }
 }

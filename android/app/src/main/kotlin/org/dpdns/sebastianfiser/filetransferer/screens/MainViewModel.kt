@@ -20,7 +20,7 @@ import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 
-class viewModel(application: Application) : AndroidViewModel(application) {
+class MainViewModel(application: Application) : AndroidViewModel(application) {
     //holds app states and variables that have to survive recompose of screens
 
     private val _uiState = MutableStateFlow<TransferUiState>(TransferUiState.Idle)
