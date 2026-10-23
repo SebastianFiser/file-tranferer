@@ -118,7 +118,7 @@ public class TransferServer
                         Console.WriteLine($"chunk file={fileId} offset={offset} received={file.BytesRecived} size={file.Size}");
                         if (offset != file.BytesRecived)
                         {
-                            await SendAsync(ws, MakeError("0", "bad_offset", "chunk or offset does not match the reciving bytes"), options);
+                            await SendAsync(ws, MakeError("0", "bad_offset", "chunk or offset does not match the receiving bytes"), options);
                             continue;
                         }
 
@@ -172,7 +172,7 @@ public class TransferServer
                         await SendAsync(ws, MakeError(msg.Id, "handshake_required", "send hello first"), options);
                         continue;
                     }
-                    switch (msg.Type) //i just want to sleep my friend.
+                    switch (msg.Type) //i just want to sleep my friend. yeah me too dw
                     {
                         case "hello":
                             if (state.HandshakeDone)

@@ -48,8 +48,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val server = ServerDiscovery(getApplication<Application>()).find()
                     ?: throw IllegalStateException("Server not found")
-                val Url = if (server != null) "ws://${server.host}:${server.port}/ws" else
-                    "ws://192.168.0.116:5000/ws"
+                val Url = if (server != null) "ws://${formatUrl(server.host)}:${server.port}" else throw IllegalStateException("Server not found")
                 val c = TransferClient(deviceName)
                 client = c
                 c.connect(Url)
@@ -118,6 +117,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = TransferUiState.Error(e.message ?: "unknown")
             }
         }
+    }
+
+    fun formatUrl(host: String): String {
+        val h = host.trim()
+        if (!h.contains(':')) return h
+        if (!h.startsWith('[')) return h
+        return "[" + h.replace("%", "%25") + "]"
     }
 
 }
