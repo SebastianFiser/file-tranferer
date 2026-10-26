@@ -1,20 +1,58 @@
-# Out-of-the-box-intuitive-easy-tot-use
-## File transferer ++
-Easy to work with, containing intuitive UI, and friendly instructions that even your grandma could follow.
+# File-transferer.
+lightweight project conatining two apps, a c# server and kolin android client.
 
-# Core idea
-Give people that are not really good with computers simple and ntuitive way, to transfer and backup their files over internet or usb Cable
+"app screenshots"
 
-## App flow
-1. open desktop app, server initializes on LAN, and makes itself visible to other devicesw, on port 5000
-2. android app, searches for this server and sends first part of hello handshake, wiotch has to be confirmed rfo server
-3. once confirmed, the device prompts you to select from witch folders you want your files transfered
-4. upon confirmation thge request issent, and you have to confirm on your pc
-5. afgter confirming, files start slowlky transfering to a polder with subfolders mimicking your device
-6. after finished transfer you'll be asked witch files to delete from phone, remove duplicates and ak to backup on cloud.
-7. after everthing finishes, you¨ll be done!
+# Functions
+Currently working:
+-simple UI response
+-device search in local networks
+-mulotiple file ending at once
+-integrity checking trough sha-256 hash
+-biggest file sent currentlz 1.1GB
 
-# support in process
-Current -> linux server, with android phone compatibility V1.0 on wifi with websokets
-V.1.1 trough cable also
-later subsequent versions expanding for different operating systems.
+Not working:
+-easy to use UI, smooth withou issues using
+-idk like everzthing
+
+# How to currently run.
+download andrpoid client and server from the latest official release.
+start the desktop app on your linux device
+download and launch .apk on zour android device
+follow instructions on the screen
+
+# How doeas out protocol work
+c is client s is server
+S: offer itself on tcp trough NSD discoverz
+C: finds server and saves its info
+
+C: creates a websocket conncetion, sending "hello" *view in notes*
+S: after reciewing hello, log device info, if its not connected and no transfer is currentlz running, respond "offer_ack"
+
+C: only after offer_ack, can client select files he's going to send
+C: picked files get gathered together and send with "offer_files* *view structure in notes*
+S: check validation of offered files, size.
+S: if seerzthings correct, respond "offer_ack" following with "request_files" witch usualz asks for as much files as it can to fit in one batch.
+
+C: processes requested files, picks them FROM THE OFFERED LIST (if its not there it cant be sent)
+C: slices file into bztefraes, start sending
+S: server catches these bzteframes, and catches the path, creates it, and start assembeling the file. if the file isnt yet the size it should be, its currently as a ,part file.
+S: affter recieving the last file, it sends "transfer_complete" witch disconnects the client, closes connection an continues with its existance.
+
+# Protocols
+-> binarz frames [1 B: lenght file_id][N B: filer_id][9 B: offset][1 B:flags][data...]
+these binarz frames are sent trough the websocket connection making zour files
+
+# Technologies
+
+Server side was developed with dotnet 10 C# and Avalonia framework
+Client side developed with jackpack compose, kotlin
+
+# Roadmap
+-no auth yet, locked to local network
+- HMAC auth planning
+- sophisticated UI with really intuitive use
+
+# Time layouts
+we have to get 117 hours on this project until 22 dec.
+Currentlz that comes up tp 1.45h a daz, lets see hows it in two dazs after not coding because of work

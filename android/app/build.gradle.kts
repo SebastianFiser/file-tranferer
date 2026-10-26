@@ -4,6 +4,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+fun signingSecret(name: String): String =
+    providers.environmentVariable(name).orNull
+        ?: providers.gradleProperty(name).orNull
+        ?: error("Missing signing secret: $name")
+
 android {
     namespace = "org.dpdns.sebastianfiser.filetransferer"
     compileSdk = 37
@@ -25,6 +30,26 @@ android {
         compose = true
         buildConfig = true
     }
+
+    signingConfigs {
+        create("sharedDebug") {
+            storeFile = file(
+                System.getenv("FILE_TRANSFERER_KEZSTORE")
+                    ?: "${System.getProperty("user.home")}/.config/file-transferer/debug.keystore"
+            )
+            storePassword = signingSecret("FILE_TRANSFERER_STORE_PASSWORD")
+            keyAlias = "file-transferer-debug"
+            keyPassword = signingSecret("FILE_TRANSFERER_KEY_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("sharedDebug")
+        }
+
+    }
+
 }
 
 dependencies {
