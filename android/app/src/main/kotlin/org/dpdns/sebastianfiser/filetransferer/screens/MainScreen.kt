@@ -17,12 +17,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.res.stringResource
 
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 import org.dpdns.sebastianfiser.filetransferer.files.queryFile
 import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
 import org.dpdns.sebastianfiser.filetransferer.screens.MainViewModel
+import org.dpdns.sebastianfiser.filetransferer.R
 
 @Composable
 fun MainScreen(transferClient: TransferClient) {
@@ -68,12 +70,18 @@ fun MainScreen(transferClient: TransferClient) {
 
         Text(
             when (s) {
-                is TransferUiState.Idle -> "Not Connected"
-                is TransferUiState.Connecting -> "Connecting..."
-                is TransferUiState.Connected -> "Connected to ${s.deviceName}"
-                is TransferUiState.Transferring -> "${s.bytesSent} / ${s.totalBytes}"
-                is TransferUiState.Done -> "done"
-                is TransferUiState.Error -> "Error: ${s.message}"
+                is TransferUiState.Idle -> stringResource(R.string.state_idle_title)
+                is TransferUiState.NotFound -> stringResource(R.string.state_notfound_title)
+                is TransferUiState.Searching -> stringResource(R.string.state_searching_title)
+                is TransferUiState.Connecting -> stringResource(R.string.state_connecting_title)
+                is TransferUiState.Connected -> stringResource(R.string.state_connected_title, s.deviceName)
+                is TransferUiState.Transferring -> stringResource(
+                    R.string.state_transferring_title,
+                    s.fileIndex + 1,
+                    s.fileCount,
+                )
+                is TransferUiState.Done -> stringResource(R.string.state_done_title)
+                is TransferUiState.Error -> stringResource(s.message.messageRes())
             }
         )
         if (s is TransferUiState.Transferring) {

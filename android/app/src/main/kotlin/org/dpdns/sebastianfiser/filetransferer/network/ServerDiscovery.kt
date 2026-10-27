@@ -42,8 +42,11 @@ class ServerDiscovery(context: Context) {
                 }
 
                 override fun onServiceResolved(info: NsdServiceInfo) {
+                    Log.d(TAG, "service=${info.serviceName}")
+                    Log.d(TAG, "host=${info.host}")
+                    Log.d(TAG, "hostAddr=${info.host?.hostAddress}")
+                    Log.d(TAG, "port=${info.port}")
                     val host = info.host?.hostAddress ?: return
-                    Log.d(TAG, "resolved $host:${info.port}")
                     stop()
                     if (cont.isActive) cont.resume(ServerAddress(host, info.port))
                 }

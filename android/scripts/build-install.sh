@@ -44,3 +44,30 @@ echo "==> INSTALLING APK ON DEVICE ${DEVICES[0]}"
 "$ADB" -s "${DEVICES[0]}" install -r "$APK_PATH" 
 
 echo "==> APK INSTALLED SUCCESSFULLY"
+
+echo "==> STARTING APP LOGCAT"
+PACKAGE="org.dpdns.sebastianfiser.filetransferer"
+DEVICE="${DEVICES[0]}"
+
+"$ADB" -s "$DEVICE" logcat -c
+"$ADB" -s "$DEVICE" shell am force-stop "$PACKAGE"
+"$ADB" -s "$DEVICE" shell monkey -p "$PACKAGE" 1 >/dev/null 2>&1
+
+echo "==> WAITING FOR PROCESS"
+PID=""
+
+for i in {1..10}; do
+    PID="$("$ADB" -s "$DEVICE" shell pidof "$PACKAGE" | tr -d '\r')"
+
+    [[ -n "$PID" ]] && break
+    sleep 0.5
+done
+
+if [[ -z "$PID" ]]; then
+    echo "ERROR: FAILED TO START APP"
+    exit 1
+fi
+
+
+echo "==> STREAMING LOGS FOR ${PACKAGE} (PID: $PID)"
+"$ADB" -s "$DEVICE" logcat --pid="$PID"

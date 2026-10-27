@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">file-transferer</string>
+
+    <string name="state_searching_title">Searching for devices...</string>
+    <string name="state_searching_hint">Make sure the other device is on the same network and has the app open.</string>
+    <string name="state_notfound_title">No devices found</string>
+    <string name="state_notfound_hint">Make sure the other device is on the same network and has the app open.</string>
+    <string name="action_retry">Retry</string>
+    <string name="state_connected_title">Connected to device %1$s</string>
+    <string name="action_pick_file">Pick files</string>
+    <string name="state_transferring_title">Sending %1$d of %2$d files</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="state_done_title">Transfer complete</string>
+    <string name="action_send_more">Send more files</string>
+    <string name="error_connection_lost">Connection lost, please try again.</string>
+    <string name="error_server_unreachable">Server unreachable, please check your network connection.</string>
+    <string name="error_rejected">Server rejected the files</string>
+    <string name="error_unknown">An unknown error occurred, please try again.</string>
+    <string name="state_idle_title">Idle</string>
+    <string name="state_connecting_title">Connecting...</string>
+</resources>

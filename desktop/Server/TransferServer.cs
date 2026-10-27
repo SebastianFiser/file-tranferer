@@ -11,6 +11,10 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Security.Cryptography;
 using Makaretu.Dns;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
+using System.Linq;
 
 
 namespace desktop.Server;
@@ -226,22 +230,90 @@ public class TransferServer
         }
 
         _app = app;
-        _port = new Uri(app.Urls.First()).Port;
+        _port = port;
         Console.WriteLine($"Listening on {string.Join(", ", app.Urls)}");
 
     }
 
+    private static int GetFreePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
+    
     public async Task StartAsync()
     {
 
-        try { await StartOnPortAsync(5000); }
-        catch (IOException) { await StartOnPortAsync(0); }
+        Console.WriteLine($"DEBUG:: __app is null = {_app == null}");
 
-        ushort ushortPort = (ushort)_port;
-        var profile = new ServiceProfile(Environment.MachineName, "_filetransferer._tcp", ushortPort);
-        _sd = new ServiceDiscovery();
+        if (_app == null)
+        {
+            try
+            {
+                await StartOnPortAsync(5000);
+            }
+            catch (IOException)
+            {
+                var port = GetFreePort();
+                await StartOnPortAsync(port);
+            }
+        }
+
+
+        ushort ushortPort = checked((ushort)_port);
+
+        if (ushortPort == 0)
+            throw new InvalidOperationException("Server port is 0.");
+
+        IPAddress? wifiIp = null;
+        NetworkInterface? wifiInterface = null;
+
+        foreach (var network in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (network.OperationalStatus != OperationalStatus.Up)
+                continue;
+
+            var properties = network.GetIPProperties();
+
+            if (!properties.GatewayAddresses.Any())
+                continue;
+
+            var address = properties.UnicastAddresses.FirstOrDefault(
+                a => a.Address.AddressFamily == AddressFamily.InterNetwork
+                    && !IPAddress.IsLoopback(a.Address));
+
+            if (address == null)
+                continue;
+
+            wifiIp = address.Address;
+            wifiInterface = network;
+            break;
+        }
+
+        if (wifiIp == null || wifiInterface == null)
+            throw new InvalidOperationException(
+                "No active network interface with IPv4 and gateway found.");
+
+        Console.WriteLine($"Advertising at: {wifiIp}:{ushortPort}");
+
+        var profile = new ServiceProfile(
+            Environment.MachineName,
+            "_filetransferer._tcp",
+            ushortPort,
+            new[] { wifiIp });
+
+        var mdns = new MulticastService(
+            interfaces => interfaces.Where(i => i.Id == wifiInterface.Id));
+
+        _sd = new ServiceDiscovery(mdns);
+        mdns.Start();
         _sd.Advertise(profile);
     }
+
 
     public async Task StopAsync()
     {

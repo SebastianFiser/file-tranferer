@@ -15,7 +15,9 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.provider.OpenableColumns
+import androidx.compose.ui.res.stringResource
 
+import org.dpdns.sebastianfiser.filetransferer.R
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
@@ -35,6 +37,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }]"
 
+    fun cancelTransfer() {
+        transferJob?.cancel()
+        transferJob = null
+        _uiState.value = TransferUiState.Connected(deviceName)
+    }
+
+    fun backToConnected() {
+        _uiState.value = TransferUiState.Connected(deviceName)
+    }
+
     fun connect() {
         if (_uiState.value is TransferUiState.Connecting ||
             _uiState.value is TransferUiState.Connected
@@ -48,7 +60,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val server = ServerDiscovery(getApplication<Application>()).find()
                     ?: throw IllegalStateException("Server not found")
-                val Url = if (server != null) "ws://${formatUrl(server.host)}:${server.port}" else throw IllegalStateException("Server not found")
+                val Url = if (server != null) "ws://${formatUrl(server.host)}:${server.port}/ws" else throw IllegalStateException("Server not found")
                 val c = TransferClient(deviceName)
                 client = c
                 c.connect(Url)
@@ -60,7 +72,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 newClient?.close()
                 client = null
-                _uiState.value = TransferUiState.Error(e.message ?: "unknown")
+                _uiState.value = TransferUiState.Error(ErrorKind.ServerUnreachable)
             }
         }
 
@@ -90,7 +102,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val resolver = getApplication<Application>().contentResolver
                 val files = withContext(Dispatchers.IO) {
-                    uris.mapIndexed { i, uri ->
+                    uris.map { uri ->
                         resolver.query(uri, null, null, null, null)!!.use { cursor ->
                             cursor.moveToFirst()
                             val name = cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
@@ -100,21 +112,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 val total = files.sumOf { it.size }
-                _uiState.value = TransferUiState.Transferring(0, total)
+                val ends = files.runningFold(0L) { acc, f -> acc + f.size }.drop(1)
+
+                _uiState.value = TransferUiState.Transferring(0, total, 0, files.size)
                 var lastUpdate = 0L
-                c.sendPickedFiles(getApplication<Application>().contentResolver, files) { sent ->
+                c.sendPickedFiles(resolver, files) { sent ->
                     val now = System.currentTimeMillis()
                     if (now - lastUpdate > 100) {
                         lastUpdate = now
-                        _uiState.value = TransferUiState.Transferring(sent, total)
+                        val idx = ends.indexOfFirst { sent < it }
+                            .let { if (it < 0) files.lastIndex else it }
+                        _uiState.value = TransferUiState.Transferring(sent, total, idx, files.size)
                     }
                 }
 
-                _uiState.value = TransferUiState.Done
+                _uiState.value = TransferUiState.Done(files.size)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.value = TransferUiState.Error(e.message ?: "unknown")
+                _uiState.value = TransferUiState.Error(ErrorKind.ConnectionLost)
             }
         }
     }
