@@ -15,7 +15,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Linq;
-
+using desktop.Models;
 
 namespace desktop.Server;
 
@@ -445,41 +445,49 @@ public class TransferServer
             return;
         }
         var baseDir = Path.GetFullPath(Path.Combine(_appPath, state.DevicePath));
-        var baseDirWithSep = Path.TrimEndingDirectorySeparator(baseDir) + Path.DirectorySeparatorChar;
 
         var files = new Dictionary<string, FileTransferState>();
 
-        foreach (var file in msg.Data.GetProperty("files").EnumerateArray())
+        var reserved = new List<string>();
+        void ReleaseReserved()
         {
-            var relativePath = file.GetProperty("relative_path").GetString();
-            var fileId = file.GetProperty("file_id").GetString();
-            var size = file.GetProperty("size").GetInt64();
-
-            var target = Path.GetFullPath(Path.Combine(baseDir, relativePath));
-
-            if (!target.StartsWith(baseDirWithSep, StringComparison.Ordinal))
+            foreach (var p in reserved)
+                try { File.Delete(p); } catch { }
+        }
+        try
+        {
+            foreach (var file in msg.Data.GetProperty("files").EnumerateArray())
             {
-                await SendAsync(ws, MakeError(msg.Id, "invalid_path", "path is outside the device directory"), options);
-                return;
+                var relativePath = file.GetProperty("relative_path").GetString();
+                var fileId = file.GetProperty("file_id").GetString();
+                var size = file.GetProperty("size").GetInt64();
+
+                string target;
+                try
+                {
+                    target = FileNaming.ResolveSafePath(baseDir, relativePath!);
+                }
+                catch (InvalidOperationException)
+                {
+                    ReleaseReserved();
+                    await SendAsync(ws, MakeError(msg.Id, "invalid_path", "path is outside the device directory"), options);
+                    return;
+                }
+                reserved.Add(target);
+
+                files[fileId] = new FileTransferState
+                {
+                    RelativePath = relativePath!,
+                    Size = size,
+                    TargetPath = target,
+                    Requested = size == 0,
+                };
             }
-
-            var isEmpty = size == 0;
-
-            if (isEmpty)
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.Create(target).Dispose();
-            }
-
-            files[fileId] = new FileTransferState
-            {
-                RelativePath = relativePath,
-                Size = size,
-                TargetPath = target,
-                Requested = isEmpty
-            };
-
-
+        }
+        catch
+        {
+            ReleaseReserved();
+            throw;
         }
 
         Directory.CreateDirectory(baseDir);
@@ -673,3 +681,4 @@ public record ValidationError(
     string Code,
     string Message
 );
+
