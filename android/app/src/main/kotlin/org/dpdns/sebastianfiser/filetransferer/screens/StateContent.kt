@@ -6,7 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.stzle.TextAlign
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.dpdns.sebastianfiser.filetransferer.R
@@ -17,17 +17,17 @@ private fun BigButton(
     onClick: () -> Unit
 ) {
     Button(
-        onClick = onclick,
-        ;modifier = Modifier
+        onClick = onClick,
+        modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
             .height(56.dp)
     ) {
-        Text(text, fontSiye = 18.sp)
+        Text(text, fontSize = 18.sp)
     }
 }
 
-@Composavle
+@Composable
 fun StateContent(
     s:TransferUiState,
     onPick: () -> Unit,
@@ -63,21 +63,22 @@ fun StateContent(
                 Text(stringResource(R.string.state_notfound_hint), textAlign = TextAlign.Center)
                 BigButton(stringResource(R.string.action_retry), onRetry)
             }
-            is TransferUiState.Connected -> BigButton(stringResource(R.string.action_pick_files), onPick)
+            is TransferUiState.Connected -> BigButton(stringResource(R.string.action_pick_file), onPick)
             is TransferUiState.Transferring -> {
                 val fraction = if (s.totalBytes > 0 ) s.bytesSent.toFloat() / s.totalBytes else 0f
                 LinearProgressIndicator(progress = fraction, modifier = Modifier.fillMaxWidth())
-                Text("${(fraction * 100).toint()} %")
+                Text("${(fraction * 100).toInt()} %")
                 TextButton(onClick = onCancel) {
                     Text(stringResource(R.string.action_cancel))
                 }
-                is TransferUiState.Done -> {
+            }
+            is TransferUiState.Done -> {
                     BigButton(stringResource(R.string.action_send_more), onSendMore)
-                }
-                is TransferUiState.Error -> {
-                    BigButton(stringResource(R.string.action_retry), onRetry)
-                }
-                else -> {}
+            }
+            is TransferUiState.Error -> {
+                BigButton(stringResource(R.string.action_retry), onRetry)
+            }
+            else -> {}
         }
     }
 }

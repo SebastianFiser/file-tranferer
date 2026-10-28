@@ -16,8 +16,11 @@ import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.res.stringResource
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.unit.dp
 
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
@@ -40,55 +43,32 @@ fun MainScreen(transferClient: TransferClient) {
         if (uris.isNotEmpty()) vm.sendFile(uris)
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Button(
-            onClick = { vm.connect() },
-            enabled = state is TransferUiState.Idle || state is TransferUiState.Error
-        ) {
-            Text("Connect")
-        }
-
-        Button(
-            onClick = { vm.disconnect() },
-            enabled = state !is TransferUiState.Idle && state !is TransferUiState.Connecting
-        ) {
-            Text("disconnect")
-        }
-
-        Button(
-            onClick = { picker.launch(arrayOf("*/*")) },
-            enabled = state is TransferUiState.Connected || state is TransferUiState.Done
-        ) {
-            Text("select files") //MY WRETARSTED why arent my lsps running
-        }
-
-        val s = state
-
-        Text(
-            when (s) {
-                is TransferUiState.Idle -> stringResource(R.string.state_idle_title)
-                is TransferUiState.NotFound -> stringResource(R.string.state_notfound_title)
-                is TransferUiState.Searching -> stringResource(R.string.state_searching_title)
-                is TransferUiState.Connecting -> stringResource(R.string.state_connecting_title)
-                is TransferUiState.Connected -> stringResource(R.string.state_connected_title, s.deviceName)
-                is TransferUiState.Transferring -> stringResource(
-                    R.string.state_transferring_title,
-                    s.fileIndex + 1,
-                    s.fileCount,
-                )
-                is TransferUiState.Done -> stringResource(R.string.state_done_title)
-                is TransferUiState.Error -> stringResource(s.message.messageRes())
-            }
-        )
-        if (s is TransferUiState.Transferring) {
-            LinearProgressIndicator(
-                progress = { if (s.totalBytes > 0) s.bytesSent.toFloat() / s.totalBytes else 0f },
-                modifier = Modifier.fillMaxWidth()
-            )
+    LaunchedEffect(Unit) {
+        if (vm.uiState.value is TransferUiState.Idle) {
+            vm.connect()
         }
     }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        StateContent(
+            s = state,
+            onPick = { picker.launch(arrayOf("*/*")) },
+            onRetry = { vm.connect() },
+            onCancel = { vm.cancelTransfer() },
+            onSendMore = { vm.backToConnected() }
+        )
+
+        if (state is TransferUiState.Connected || state is TransferUiState.Done) {
+            TextButton(
+                onClick = { vm.disconnect() },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(24.dp)
+            ) {
+                Text(stringResource(R.string.action_disconnect))
+            }
+        }
+    }
+
+    
 }
