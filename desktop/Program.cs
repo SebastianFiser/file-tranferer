@@ -1,6 +1,7 @@
 ﻿using Avalonia;
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using desktop.Server;
 
@@ -19,7 +20,19 @@ sealed class Program
             var server = new TransferServer();
             await server.StartAsync();
             Console.WriteLine("Server běží (headless).");
-            await Task.Delay(Timeout.Infinite);
+            using var cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) => {
+                e.Cancel = true;
+                cts.Cancel();
+            };
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                await server.StopAsync();
+            }
             return;
         }
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
