@@ -35,6 +35,11 @@ private const val TAG = "TransferClient"
 const val FLAG_LAST = 0x01
 
 // Flag_last not integrated on server, once a whole batch arrives, connection closes
+class ServerException(
+    val code: String,
+    message: String
+) : Exception(message)
+
 class TransferClient(
     private val deviceName: String
 ) {
@@ -110,11 +115,11 @@ class TransferClient(
 
     suspend fun sendOfferFiles(files: List<FileInfo>): OfferAckData {
         val data = Json.encodeToJsonElement(OfferFilesData(files))
-        val response = request("offer_files", data)
+        val response = request("offer_files", data, timeoutMs = 60_000)
         Log.d("TransferClient", "offer response type=${response.type}")
         if (response.type == "error") {
             val err = Json.decodeFromJsonElement<ErrorData>(response.data)
-            error("server: ${err.code} : ${err.message}")
+            throw ServerException(err.code, err.message)
         }
         val ack = Json.decodeFromJsonElement<OfferAckData>(response.data)
         check(ack.accepted) { "server declined offer_files" }
@@ -177,7 +182,13 @@ class TransferClient(
         Log.d("TransferClient", "all chunks qeued")
     }
 
-    suspend fun sendPickedFiles(resolver: ContentResolver, picked: List<PickedFile>, onProgress: (Long) -> Unit) {
+    suspend fun sendPickedFiles(
+        resolver: ContentResolver,
+        picked: List<PickedFile>,
+        onWaiting: () -> Unit = {},
+        onAccepted: () -> Unit = {},
+        onProgress: (Long) -> Unit = {}
+    ) {
         var sentTotal = 0L
         withTimeout(5000) { ready.await() } // <- this lil bitchass is closing my webhsocket
         val ws = webSocket ?: error("Not connected")
@@ -188,8 +199,9 @@ class TransferClient(
             FileInfo(p.name.substringAfterLast('/'), p.size, id)
         }
 
-
+        onWaiting()
         val ack = sendOfferFiles(infos)
+        onAccepted()
         Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}")
 
         val req = awaitServerMessage("request_files")

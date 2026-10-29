@@ -51,6 +51,9 @@ fun StateContent(
             is TransferUiState.Transferring -> stringResource(R.string.state_transferring_title, s.fileIndex + 1, s.fileCount)
             is TransferUiState.Done -> stringResource(R.string.state_done_title)
             is TransferUiState.Error -> stringResource(s.message.messageRes())
+            is TransferUiState.WaitingForConfirmation -> stringResource(R.string.state_waiting_for_confirmation_title)
+            is TransferUiState.Rejected -> stringResource(R.string.state_rejected_title)
+            is TransferUiState.Timeout -> stringResource(R.string.state_timeout_title)
         }
         Text(title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
 
@@ -73,9 +76,18 @@ fun StateContent(
                 }
             }
             is TransferUiState.Done -> {
-                    BigButton(stringResource(R.string.action_send_more), onSendMore)
+                BigButton(stringResource(R.string.action_send_more), onSendMore)
             }
             is TransferUiState.Error -> {
+                BigButton(stringResource(R.string.action_retry), onRetry)
+            }
+            is TransferUiState.WaitingForConfirmation -> {
+                CircularProgressIndicator()
+            }
+            is TransferUiState.Rejected -> {
+                BigButton(stringResource(R.string.action_retry), onRetry)
+            }
+            is TransferUiState.Timeout -> {
                 BigButton(stringResource(R.string.action_retry), onRetry)
             }
             else -> {}

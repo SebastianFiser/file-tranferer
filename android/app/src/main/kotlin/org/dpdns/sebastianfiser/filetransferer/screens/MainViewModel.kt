@@ -21,6 +21,7 @@ import org.dpdns.sebastianfiser.filetransferer.R
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
+import org.dpdns.sebastianfiser.filetransferer.network.ServerException
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     //holds app states and variables that have to survive recompose of screens
@@ -72,7 +73,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 newClient?.close()
                 client = null
-                _uiState.value = TransferUiState.Error(ErrorKind.ServerUnreachable)
+                if (e is ServerException) {
+                    _uiState.value = TransferUiState.Error(ErrorKind.ServerUnreachable)
+                } else {
+                    _uiState.value = TransferUiState.Error(ErrorKind.Unknown)
+                }
             }
         }
 
@@ -116,17 +121,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 _uiState.value = TransferUiState.Transferring(0, total, 0, files.size)
                 var lastUpdate = 0L
-                c.sendPickedFiles(resolver, files) { sent ->
-                    val now = System.currentTimeMillis()
-                    if (now - lastUpdate > 100) {
-                        lastUpdate = now
-                        val idx = ends.indexOfFirst { sent < it }
-                            .let { if (it < 0) files.lastIndex else it }
-                        _uiState.value = TransferUiState.Transferring(sent, total, idx, files.size)
+                c.sendPickedFiles(
+                    resolver, files,
+                    onWaiting = { _uiState.value = TransferUiState.WaitingForConfirmation},
+                    onAccepted = { _uiState.value = TransferUiState.Transferring(0, total, 0, files.size) },
+                    onProgress =  { sent ->
+                        val now = System.currentTimeMillis()
+                        if (now - lastUpdate > 100) {
+                            lastUpdate = now
+                            val idx = ends.indexOfFirst { sent < it }
+                                .let { if (it < 0) files.lastIndex else it }
+                            _uiState.value = TransferUiState.Transferring(sent, total, idx, files.size)
+                        }
                     }
-                }
+                )
 
                 _uiState.value = TransferUiState.Done(files.size)
+            } catch (e: ServerException){
+                _uiState.value = when (e.code) {
+                    "offer_rejected" -> TransferUiState.Rejected
+                    "offer_timeout" -> TransferUiState.Timeout
+                    else -> TransferUiState.Error(ErrorKind.Unknown)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

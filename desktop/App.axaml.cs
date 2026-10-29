@@ -42,7 +42,7 @@ public partial class App : Application
             desktop.Exit += (s, e) =>
             {
                 if (_server != null)
-                    Task.Run(() => _server.StopAsync()).Wait(TimeSpan.FromSeconds(5));
+                    Task.Run(() => _server.StopAsync()).Wait(TimeSpan.FromSeconds(60));
             };
         }
 

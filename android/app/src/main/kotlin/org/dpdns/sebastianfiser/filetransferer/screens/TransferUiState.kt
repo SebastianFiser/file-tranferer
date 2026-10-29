@@ -7,6 +7,9 @@ sealed interface TransferUiState {
     data object Searching : TransferUiState
     data object Connecting : TransferUiState
     data object NotFound : TransferUiState
+    data object WaitingForConfirmation : TransferUiState
+    data object Rejected : TransferUiState
+    data object Timeout : TransferUiState
 
     data class Connected(
         val deviceName: String

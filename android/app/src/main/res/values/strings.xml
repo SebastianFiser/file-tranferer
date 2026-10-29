@@ -19,4 +19,8 @@
     <string name="state_idle_title">Idle</string>
     <string name="state_connecting_title">Connecting...</string>
     <string name="action_disconnect">Disconnect</string>
+    <string name="state_waiting_for_confirmation_hint">Waiting for confirmation...</string>
+    <string name="state_rejected_title">Transfer rejected</string>
+    <string name="state_timeout_title">Transfer timed out</string>
+    <string name="state_waiting_for_confirmation_title"> Waiting for confirmation</string>
 </resources>
