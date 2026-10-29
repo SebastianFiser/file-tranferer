@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading; 
 using desktop.ViewModels;
 using desktop.Views;
 using System.Threading.Tasks;
@@ -22,17 +23,26 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow
+
+            Console.CancelKeyPress += (s, e) =>
             {
-                DataContext = new MainViewModel(),
+                e.Cancel = true;
+                Dispatcher.UIThread.Post(() => desktop.Shutdown());
             };
 
+            var vm = new MainViewModel();
+            desktop.MainWindow = new MainWindow
+            {
+                DataContext = vm,
+            };
+            TransferServer.ConfirmOfferAsync = vm.ShowOfferAsync;
             _server = new TransferServer();
             _ = StartServerAsync();
 
             desktop.Exit += (s, e) =>
             {
-                _server?.StopAsync().GetAwaiter().GetResult();
+                if (_server != null)
+                    Task.Run(() => _server.StopAsync()).Wait(TimeSpan.FromSeconds(5));
             };
         }
 

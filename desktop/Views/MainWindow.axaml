@@ -10,13 +10,21 @@
         Title="desktop">
 
     <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
         <vm:MainViewModel />
     </Design.DataContext>
 
-    <TextBox Text="{Binding Greeting}"
-             HorizontalAlignment="Center"
-             VerticalAlignment="Center" />
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+        <TextBlock Text="Waiting for device..." FontSize="24"
+        IsVisible="{Binding !IsOfferVisible}" />
+        <StackPanel IsVisible="{Binding IsOfferVisible}" Spacing="16">
+            <TextBlock Text="{Binding OfferText}" FontSize="20" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
+                <Button Content="Accept" Command="{Binding AcceptCommand}" />
+                <Button Content="Reject" Command="{Binding RejectCommand}" />
+
+            </StackPanel>
+        </StackPanel>
+
+    </StackPanel>
 
 </Window>

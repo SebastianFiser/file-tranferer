@@ -22,6 +22,7 @@ namespace desktop.Server;
 public class TransferServer
 {
     private WebApplication? _app;
+    public static Func<OfferInfo, CancellationToken, Task<bool>>? ConfirmOfferAsync { get; set; }
     private int _port;
     private const int _maxFileCount = 10000;
     private const long _maxTotalSize = 20L * 1024 * 1024 * 1024;
@@ -424,8 +425,11 @@ public class TransferServer
         }
         if (state.TransferId != null)
         {
-            await SendAsync(ws, MakeError(msg.Id, "transfer_in_progress", "a transfer is already in progress"), options);
-            return;
+            if (state.AwaitingDecision)
+            {    
+                await SendAsync(ws, MakeError(msg.Id, "transfer_in_progress", "a transfer is already in progress"), options);
+                return;
+            }
         }
 
         var error = ValidateOffer(msg.Data);
@@ -443,6 +447,38 @@ public class TransferServer
         {
             await SendAsync(ws, MakeError(msg.Id, "insufficient_space", "theres not enough space to transfer files"), options);
             return;
+        }
+        if (ConfirmOfferAsync != null) {
+            var info = new OfferInfo(
+                state.DeviceName ?? "unknown device",
+                msg.Data.GetProperty("files").GetArrayLength(),
+                fileSize
+            );
+            
+            state.AwaitingDecision = true;
+            bool accepted;
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                accepted = await ConfirmOfferAsync(info, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                state.AwaitingDecision = false;
+                await SendAsync(ws, MakeError(msg.Id, "offer_timeout", "nobody confirmed the transfer in time"), options);
+                return;
+            }
+            finally
+            {
+                state.AwaitingDecision = false;
+            }
+
+            if (!accepted)
+            {
+                await SendAsync(ws, MakeError(msg.Id, "offer_rejected", "the transfer was declined"), options);
+                return;
+            }
+
         }
         var baseDir = Path.GetFullPath(Path.Combine(_appPath, state.DevicePath));
 
