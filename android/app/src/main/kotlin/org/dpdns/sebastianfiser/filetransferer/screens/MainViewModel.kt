@@ -161,7 +161,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 )
 
-                _uiState.value = TransferUiState.Done(files.size)
+                _uiState.value = TransferUiState.Done(files.size, total)
             } catch (e: ServerException){
                 _uiState.value = when (e.code) {
                     "offer_rejected" -> TransferUiState.Rejected

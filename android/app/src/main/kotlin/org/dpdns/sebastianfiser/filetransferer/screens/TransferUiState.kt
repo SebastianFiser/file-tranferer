@@ -26,7 +26,8 @@ sealed interface TransferUiState {
     ) : TransferUiState
 
     data class Done(
-        val fileCount: Int
+        val fileCount: Int,
+        val totalBytes: Long
     ) : TransferUiState
 
     data class Error(

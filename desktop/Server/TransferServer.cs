@@ -49,7 +49,18 @@ public class TransferServer
             bytes += f.BytesRecived;
             if (f.BytesRecived >= f.Size) done++;
         }
-        StatusChanged?.Invoke(new TransferStatus(phase, s.DeviceName ?? " ", bytes, total, done, s.Files.Count));
+        string? folder = null;
+        List<ReceivedFile>? received = null;
+        if (phase == TransferPhase.Done)
+        {
+            folder = Path.GetFullPath(Path.Combine(_appPath, s.DevicePath));
+            received = s.Files.Values
+                .Select(f => new ReceivedFile(Path.GetFileName(f.TargetPath), f.Size, f.TargetPath))
+                .ToList();
+        }
+        StatusChanged?.Invoke(new TransferStatus(
+            phase, s.DeviceName ?? "", bytes, total, done, s.Files.Count, folder, received
+        ));
     }
 
     public static async Task CancelActiveTransferAsync()

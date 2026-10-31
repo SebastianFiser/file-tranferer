@@ -6,6 +6,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using desktop.Models;
 using desktop.Server;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Linq;
+
 
 namespace desktop.ViewModels;
 
@@ -30,6 +34,11 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private double _transferProgress;
 
     [ObservableProperty] private string _offerText = "";
+
+    public ObservableCollection<string> ReceivedFiles { get; } = new();
+
+    [ObservableProperty] private bool _hasReceived;
+    private string? _lastFolder;
 
     private long _lastTick;
     private long _lastBytes;
@@ -88,6 +97,15 @@ public partial class MainViewModel : ObservableObject
                 case TransferPhase.Done:
                     IsTransferVisible = false;
                     StatusText = $"Done {s.FileCount} files ({FormatSize(s.Total)})";
+                    _lastFolder = s.Folder;
+                    if (s.Files != null)
+                    {
+                        foreach (var f in Enumerable.Reverse(s.Files))
+                            ReceivedFiles.Insert(0, $"{f.Name} ({FormatSize(f.Size)})");
+                        while (ReceivedFiles.Count > 50)
+                            ReceivedFiles.RemoveAt(ReceivedFiles.Count - 1);
+                        HasReceived = ReceivedFiles.Count > 0;
+                    }
                     break;
                 case TransferPhase.Cancelled:
                     IsTransferVisible = false;
@@ -148,5 +166,20 @@ public partial class MainViewModel : ObservableObject
         var t = TimeSpan.FromSeconds(seconds);
         return t.TotalHours >= 1? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
     }
+
+    [RelayCommand]
+    private void OpenFolder()
+    {
+        if (_lastFolder == null) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = _lastFolder, UseShellExecute = true});
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to open folder {_lastFolder}: {ex}");
+        }
+    }
+
 
 }

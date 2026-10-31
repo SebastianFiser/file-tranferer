@@ -86,6 +86,7 @@ fun StateContent(
                 }
             }
             is TransferUiState.Done -> {
+                Text(stringResource(R.string.state_done_summary, s.fileCount, formatBytes(s.totalBytes)))
                 BigButton(stringResource(R.string.action_send_more), onSendMore)
             }
             is TransferUiState.Error -> {

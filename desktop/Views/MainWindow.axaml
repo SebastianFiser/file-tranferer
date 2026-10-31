@@ -14,9 +14,12 @@
     </Design.DataContext>
 
     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
-        <TextBlock Text="{Binding StatusText}" FontSize="24"
-            IsVisible="{Binding IsIdleVisible}" />
-
+        <StackPanel IsVisible="{Binding IsIdleVisible}" Spacing="12" Width="420">
+            <TextBlock Text="{Binding StatusText}" FontSize="24"
+                HorizontalAlignment="Center" TextWrapping="Wrap" />
+            <Button Content="Open Folder" Command="{Binding OpenFolderCommand}" IsVisible="{Binding HasReceived}" HorizontalAlignment="Center" /> 
+            <ListBox ItemsSource="{Binding ReceivedFiles}" IsVisible="{Binding HasReceived}" MaxHeight="220" />
+        </StackPanel>
         <StackPanel IsVisible="{Binding IsTransferVisible}" Spacing="16" Width="360">
             <TextBlock Text="{Binding TransferText}" TextWrapping="Wrap" />
             <ProgressBar Minimum="0" Maximum="100" Value="{Binding TransferProgress}" />
