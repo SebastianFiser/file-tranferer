@@ -54,6 +54,7 @@ fun StateContent(
             is TransferUiState.WaitingForConfirmation -> stringResource(R.string.state_waiting_for_confirmation_title)
             is TransferUiState.Rejected -> stringResource(R.string.state_rejected_title)
             is TransferUiState.Timeout -> stringResource(R.string.state_timeout_title)
+            is TransferUiState.Cancelled -> stringResource(R.string.state_cancelled_title)
         }
         Text(title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
 
@@ -83,6 +84,9 @@ fun StateContent(
             }
             is TransferUiState.WaitingForConfirmation -> {
                 CircularProgressIndicator()
+                TextButton(onClick = onCancel) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             }
             is TransferUiState.Rejected -> {
                 BigButton(stringResource(R.string.action_retry), onRetry)
@@ -90,6 +94,8 @@ fun StateContent(
             is TransferUiState.Timeout -> {
                 BigButton(stringResource(R.string.action_retry), onRetry)
             }
+            is TransferUiState.Cancelled -> 
+                BigButton(stringResource(R.string.action_send_more), onSendMore)
             else -> {}
         }
     }

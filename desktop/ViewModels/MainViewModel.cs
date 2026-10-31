@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using desktop.Models;
+using desktop.Server;
 
 namespace desktop.ViewModels;
 
@@ -12,8 +13,54 @@ public partial class MainViewModel : ObservableObject
 {
     public TaskCompletionSource<bool>? _decision;
 
-    [ObservableProperty] private bool _isOfferVisible;
+    [ObservableProperty] 
+    [NotifyPropertyChangedFor(nameof(IsIdleVisible))]
+    private bool _isOfferVisible;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdleVisible))]
+    private bool _isTransferInProgress;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdleVisible))]
+    private bool _isTransferVisible;
+
+    [ObservableProperty] private string _statusText = "Waiting for device";
+    [ObservableProperty] private string _transferText = "";
+    [ObservableProperty] private double _transferProgress;
+
     [ObservableProperty] private string _offerText = "";
+
+    public bool IsIdleVisible => !IsOfferVisible && !IsTransferVisible;
+
+    public MainViewModel()
+    {
+        TransferServer.StatusChanged += OnStatus;
+    }
+
+    private void OnStatus(TransferStatus s) => Dispatcher.UIThread.Post(() =>
+    {
+        switch (s.Phase)
+        {
+            case TransferPhase.Started:
+            case TransferPhase.Progress:
+                IsTransferVisible = true;
+                TransferProgress = s.Total > 0 ? 100.0 * s.Bytes / s.Total : 0;
+                TransferText = $"{s.Device}: {s.FilesDone}/{s.FileCount} files ({FormatSize(s.Bytes)} of {FormatSize(s.Total)})";
+                break;
+            case TransferPhase.Done:
+                IsTransferVisible = false;
+                StatusText = $"Done {s.FileCount} files ({FormatSize(s.Total)})";
+                break;
+            case TransferPhase.Cancelled:
+                IsTransferVisible = false;
+                StatusText = $"Transfer cancelled";
+                break;
+        }
+    });
+
+    [RelayCommand]
+    private Task CancelTransfer() => TransferServer.CancelActiveTransferAsync();
 
     public Task<bool> ShowOfferAsync(OfferInfo info, CancellationToken ct)
     {

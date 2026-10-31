@@ -9,6 +9,7 @@ sealed interface TransferUiState {
     data object NotFound : TransferUiState
     data object WaitingForConfirmation : TransferUiState
     data object Rejected : TransferUiState
+    data object Cancelled : TransferUiState
     data object Timeout : TransferUiState
 
     data class Connected(

@@ -12,6 +12,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +43,8 @@ class ServerException(
     message: String
 ) : Exception(message)
 
+class TransferCancelledException : Exception("Transfer cancelled by server")
+
 class TransferClient(
     private val deviceName: String
 ) {
@@ -49,6 +54,8 @@ class TransferClient(
 
     @Volatile
     private var ready = CompletableDeferred<Unit>()
+
+    @Volatile private var cancelledByServer = false
 
     private val serverMessages = Channel<Envelope>(Channel.UNLIMITED)
 
@@ -71,6 +78,7 @@ class TransferClient(
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val envelope = Json.decodeFromString<Envelope>(text)
+                if (envelope.type == "cancel") cancelledByServer = true
                 Log.d("TransferServer", "onMessage ${envelope.type}")
                 if (envelope.type == "hello_ack") ready.complete(Unit)
                 val waiter = pending[envelope.id]
@@ -144,7 +152,10 @@ class TransferClient(
     suspend fun awaitServerMessage(type: String, timeoutMs: Long = 5000): Envelope =
         withTimeout(timeoutMs) { //<- its this ahole i knew it
             var msg = serverMessages.receive() //HAHAHAH it compiled!
-            while (msg.type != type) msg = serverMessages.receive()//lowk lock in
+            while (msg.type != type) {
+                if (msg.type == "cancel") throw TransferCancelledException()
+                msg = serverMessages.receive()
+            }
             msg//i would like to watch a movie but i cant find it lowk
         }
 
@@ -190,39 +201,48 @@ class TransferClient(
         onProgress: (Long) -> Unit = {}
     ) {
         var sentTotal = 0L
-        withTimeout(5000) { ready.await() } // <- this lil bitchass is closing my webhsocket
-        val ws = webSocket ?: error("Not connected")
-        offered.clear()
-        val infos = picked.mapIndexed { i, p ->
-            val id = "${i + 1}"
-            offered[id] = p
-            FileInfo(p.name.substringAfterLast('/'), p.size, id)
-        }
+        cancelledByServer = false
+        while (serverMessages.tryReceive().isSuccess) { }
 
-        onWaiting()
-        val ack = sendOfferFiles(infos)
-        onAccepted()
-        Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}")
-
-        val req = awaitServerMessage("request_files")
-        val wanted = Json.decodeFromJsonElement<RequestFilesData>(req.data)
-
-        for (id in wanted.fileIds) {
-            val file = offered[id] ?: error("Server asked for unknown file $id")
-            sendFile(resolver, file, id) { n ->
-                sentTotal += n
-                onProgress(sentTotal)
+        var finished = false
+        try {
+            withTimeout(5000) { ready.await() } // <- this lil bitchass is closing my webhsocket
+            val ws = webSocket ?: error("Not connected")
+            offered.clear()
+            val infos = picked.mapIndexed { i, p ->
+                val id = "${i + 1}"
+                offered[id] = p
+                FileInfo(p.name.substringAfterLast('/'), p.size, id)
             }
+
+            onWaiting()
+            val ack = sendOfferFiles(infos)
+            onAccepted()
+            Log.d("TransferClient", "offer accepted, transfer_id=${ack.transferId}")
+
+            val req = awaitServerMessage("request_files")
+            val wanted = Json.decodeFromJsonElement<RequestFilesData>(req.data)
+
+            for (id in wanted.fileIds) {
+                val file = offered[id] ?: error("Server asked for unknown file $id")
+                sendFile(resolver, file, id) { n ->
+                    sentTotal += n
+                    onProgress(sentTotal)
+                }
+            }
+
+            if (ws.queueSize() > 0) delay(10)
+            Log.d("TransferServer", "Qeuse drained")
+            val totalBytes = wanted.fileIds.sumOf { id -> offered[id]?.size ?: 0L }
+            val timeoutMs: Long = calscTimeoutMs(totalBytes)
+
+            Log.d("TransferServer", "waiting for transfer complete wioth timneout $timeoutMs")
+            val done = awaitServerMessage("transfer_complete", timeoutMs)
+            Log.d("TransferClient", "server says:  ${done.type} ${done.data}")
+            finished = true
+        } finally {
+            if (!finished) sendCancel()
         }
-
-        if (ws.queueSize() > 0) delay(10)
-        Log.d("TransferServer", "Qeuse drained")
-        val totalBytes = wanted.fileIds.sumOf { id -> offered[id]?.size ?: 0L }
-        val timeoutMs: Long = calscTimeoutMs(totalBytes)
-
-        Log.d("TransferServer", "waiting for transfer complete wioth timneout $timeoutMs")
-        val done = awaitServerMessage("transfer_complete", timeoutMs)
-        Log.d("TransferClient", "server says:  ${done.type} ${done.data}")
     }
 
     //i genuenlymlove macondo, thanks to them i have thing at age i could never afford :)
@@ -247,6 +267,8 @@ class TransferClient(
 
         input.use {
             while (true) {
+                currentCoroutineContext().ensureActive()
+                if (cancelledByServer) throw TransferCancelledException()
                 val n = it.read(buffer)
                 if (n <= 0) break
                 val isLast = offset + n == picked.size
@@ -265,6 +287,12 @@ class TransferClient(
         val BytesPerBase = 1 * 1024L * 1024L  //this will prolly ba aight
 
         return TimeoutBaseMs + totalBytes * 1000L / BytesPerBase
+    }
+
+    private fun sendCancel() {
+        val ws = webSocket ?: return
+        val msg = Envelope(UUID.randomUUID().toString(), "cancel", JsonObject(emptyMap()))
+        ws.send(Json.encodeToString(msg))
     }
 
 }

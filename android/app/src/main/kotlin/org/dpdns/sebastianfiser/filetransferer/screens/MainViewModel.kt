@@ -16,12 +16,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.provider.OpenableColumns
 import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.isActive
 
 import org.dpdns.sebastianfiser.filetransferer.R
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 import org.dpdns.sebastianfiser.filetransferer.network.ServerException
+import org.dpdns.sebastianfiser.filetransferer.network.TransferCancelledException
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     //holds app states and variables that have to survive recompose of screens
@@ -41,7 +44,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun cancelTransfer() {
         transferJob?.cancel()
         transferJob = null
-        _uiState.value = TransferUiState.Connected(deviceName)
+        _uiState.value = TransferUiState.Cancelled
     }
 
     fun backToConnected() {
@@ -101,7 +104,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendFile(uris: List<Uri>) {
         val c = client ?: return
-        if (_uiState.value is TransferUiState.Transferring) return
+        if (_uiState.value is TransferUiState.Transferring || _uiState.value is TransferUiState.WaitingForConfirmation) return
 
         transferJob = viewModelScope.launch {
             try {
@@ -124,7 +127,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 c.sendPickedFiles(
                     resolver, files,
                     onWaiting = { _uiState.value = TransferUiState.WaitingForConfirmation},
-                    onAccepted = { _uiState.value = TransferUiState.Transferring(0, total, 0, files.size) },
+                    onAccepted = { if (isActive) _uiState.value = TransferUiState.Transferring(0, total, 0, files.size) },
                     onProgress =  { sent ->
                         val now = System.currentTimeMillis()
                         if (now - lastUpdate > 100) {
@@ -142,6 +145,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "offer_rejected" -> TransferUiState.Rejected
                     "offer_timeout" -> TransferUiState.Timeout
                     else -> TransferUiState.Error(ErrorKind.Unknown)
+                }
+            } catch (e: TransferCancelledException) {
+                _uiState.value = TransferUiState.Cancelled
+            } catch (e: TimeoutCancellationException) {
+                _uiState.value = if (_uiState.value is TransferUiState.WaitingForConfirmation) {
+                    TransferUiState.Timeout
+                } else {
+                    TransferUiState.Error(ErrorKind.ConnectionLost)
                 }
             } catch (e: CancellationException) {
                 throw e
