@@ -9,7 +9,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
 import org.dpdns.sebastianfiser.filetransferer.R
+import org.dpdns.sebastianfiser.filetransferer.protocol.formatBytes
+import org.dpdns.sebastianfiser.filetransferer.protocol.formatEta
 
 @Composable
 private fun BigButton(
@@ -72,6 +75,12 @@ fun StateContent(
                 val fraction = if (s.totalBytes > 0 ) s.bytesSent.toFloat() / s.totalBytes else 0f
                 LinearProgressIndicator(progress = fraction, modifier = Modifier.fillMaxWidth())
                 Text("${(fraction * 100).toInt()} %")
+                Text("${formatBytes(s.bytesSent)} / ${formatBytes(s.totalBytes)}")
+                if (s.speedBps > 0) {
+                    val eta = if (s.etaSeconds >= 0)
+                        " . " + stringResource(R.string.transfer_eta, formatEta(s.etaSeconds)) else ""
+                    Text(stringResource(R.string.transfer_speed, formatBytes(s.speedBps)) + eta)
+                }
                 TextButton(onClick = onCancel) {
                     Text(stringResource(R.string.action_cancel))
                 }

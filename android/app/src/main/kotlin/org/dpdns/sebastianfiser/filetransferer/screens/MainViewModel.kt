@@ -34,6 +34,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var client: TransferClient? = null
     private var transferJob: Job? = null
+ 
 
     private val deviceName = "${Build.MODEL}[${
         Settings.Secure.getString(
@@ -124,17 +125,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 _uiState.value = TransferUiState.Transferring(0, total, 0, files.size)
                 var lastUpdate = 0L
+                var lastBytes = 0L
+                var speed = 0.0 //B.s smoothsajbcsal
+                var startedAt = 0L
                 c.sendPickedFiles(
                     resolver, files,
                     onWaiting = { _uiState.value = TransferUiState.WaitingForConfirmation},
-                    onAccepted = { if (isActive) _uiState.value = TransferUiState.Transferring(0, total, 0, files.size) },
+                    onAccepted = { 
+                        if (isActive){
+                            val now = System.currentTimeMillis()
+                            startedAt = now
+                            lastUpdate = now
+                            lastBytes = 0L
+                            speed = 0.0
+                            _uiState.value = TransferUiState.Transferring(0, total, 0, files.size)
+                        } 
+                    },
                     onProgress =  { sent ->
                         val now = System.currentTimeMillis()
-                        if (now - lastUpdate > 100) {
+                        if (isActive  && now - lastUpdate > 100) {
+                            val dt = (now -lastUpdate) / 1000.0
+                            val instant = (sent - lastBytes) / dt
+                            speed = if (speed == 0.0) instant else 0.1 * instant + 0.9 * speed
                             lastUpdate = now
+                            lastBytes = sent
+
+                            val eta = if (now - startedAt > 2000 && speed > 0)
+                                ((total - sent) / speed).toLong() else -1L
                             val idx = ends.indexOfFirst { sent < it }
                                 .let { if (it < 0) files.lastIndex else it }
-                            _uiState.value = TransferUiState.Transferring(sent, total, idx, files.size)
+                            _uiState.value = TransferUiState.Transferring(
+                                sent, total, idx, files.size, speed.toLong(), eta
+                            )
                         }
                     }
                 )

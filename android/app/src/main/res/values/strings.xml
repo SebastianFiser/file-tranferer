@@ -24,4 +24,6 @@
     <string name="state_timeout_title">Transfer timed out</string>
     <string name="state_waiting_for_confirmation_title"> Waiting for confirmation</string>
     <string name="state_cancelled_title">Transfer was cancelled</string>
+    <string name="transfer_speed">%1$s/s</string>
+    <string name="transfer_eta">estimated time remaining: %1$s</string>
 </resources>
