@@ -18,6 +18,7 @@ import android.provider.OpenableColumns
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeoutOrNull
 
 import org.dpdns.sebastianfiser.filetransferer.R
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
@@ -25,6 +26,9 @@ import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 import org.dpdns.sebastianfiser.filetransferer.network.ServerException
 import org.dpdns.sebastianfiser.filetransferer.network.TransferCancelledException
+import org.dpdns.sebastianfiser.filetransferer.network.LastServerStore
+import org.dpdns.sebastianfiser.filetransferer.protocol.formatBytes
+
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     //holds app states and variables that have to survive recompose of screens
@@ -34,6 +38,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var client: TransferClient? = null
     private var transferJob: Job? = null
+    private val lastServerStore = LastServerStore(application)
  
 
     private val deviceName = "${Build.MODEL}[${
@@ -52,6 +57,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = TransferUiState.Connected(deviceName)
     }
 
+    private suspend fun tryConnect(url: String): TransferClient? {
+        val c = TransferClient(deviceName)
+        val ok: Boolean? = try {
+            withTimeoutOrNull(3000) {
+                c.connect(url)
+                true
+            }
+        } catch (e: CancellationException) {
+            c.close()
+            throw e
+        } catch (e: Exception) {
+            c.close()
+            false
+        }
+        return if (ok == true) c else null
+    } 
+
     fun connect() {
         if (_uiState.value is TransferUiState.Connecting ||
             _uiState.value is TransferUiState.Connected
@@ -63,6 +85,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             var newClient: TransferClient? = null
             try {
+                _uiState.value = TransferUiState.Searching
+                var saved = lastServerStore.load()
+                var cTry: TransferClient? = null
+                if (saved != null) {
+                    cTry = tryConnect(saved)
+                    client = cTry
+                    _uiState.value = TransferUiState.Connected(saved)
+                    return@launch
+                }
                 val server = ServerDiscovery(getApplication<Application>()).find()
                     ?: throw IllegalStateException("Server not found")
                 val Url = if (server != null) "ws://${formatUrl(server.host)}:${server.port}/ws" else throw IllegalStateException("Server not found")
@@ -71,6 +102,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 c.connect(Url)
                 client = c
                 _uiState.value = TransferUiState.Connected(server?.host ?: "unknown")
+                lastServerStore.save(Url)
             } catch (e: CancellationException) {
                 newClient?.close()
                 throw e
