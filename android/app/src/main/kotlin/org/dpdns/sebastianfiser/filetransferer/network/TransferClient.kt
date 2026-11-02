@@ -2,11 +2,6 @@ package org.dpdns.sebastianfiser.filetransferer.network
 
 import android.util.Log
 import okhttp3.*
-import org.dpdns.sebastianfiser.filetransferer.protocol.Envelope
-import org.dpdns.sebastianfiser.filetransferer.protocol.HelloData
-import org.dpdns.sebastianfiser.filetransferer.protocol.FileInfo
-import org.dpdns.sebastianfiser.filetransferer.protocol.OfferFilesData
-import org.dpdns.sebastianfiser.filetransferer.protocol.OfferAckData
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
@@ -26,12 +21,22 @@ import okio.ByteString.Companion.toByteString
 import kotlinx.coroutines.channels.Channel
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import org.dpdns.sebastianfiser.filetransferer.protocol.RequestFilesData
 import android.content.ContentResolver
 import kotlinx.coroutines.delay
+import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
+import java.security.MessageDigest
+
+import org.dpdns.sebastianfiser.filetransferer.protocol.RequestFilesData
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
 import org.dpdns.sebastianfiser.filetransferer.files.queryFile
-import org.dpdns.sebastianfiser.filetransferer.protocol.ErrorData
+import org.dpdns.sebastianfiser.filetransferer.protocol.*
+import org.dpdns.sebastianfiser.filetransferer.protocol.Envelope
+import org.dpdns.sebastianfiser.filetransferer.protocol.HelloData
+import org.dpdns.sebastianfiser.filetransferer.protocol.FileInfo
+import org.dpdns.sebastianfiser.filetransferer.protocol.OfferFilesData
+import org.dpdns.sebastianfiser.filetransferer.protocol.OfferAckData
+
 
 //why isnt hackatime tracking
 private const val TAG = "TransferClient"
@@ -51,6 +56,7 @@ class TransferClient(
     private val client = OkHttpClient()
     private var webSocket: WebSocket? = null
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Envelope>>()
+    private val hashWaiters = ConcurreentHashMap<String, CompletableDeferred<List<HashData>>>()
 
     @Volatile
     private var ready = CompletableDeferred<Unit>()
@@ -63,7 +69,17 @@ class TransferClient(
 
     private val offered = ConcurrentHashMap<String, PickedFile>()
 
-    fun connect(url: String) {
+    fun registerHashWaiter(transferId: String): CompletableDeferred<List<HashData>> {
+        val d = CompletableDeferred<List<HashData>>()
+        hashWaiters[transferId] = d
+        return d
+    }
+
+    fun removeHashWaiter(transferId: String) {
+        hashWaiters.remove(transferId)
+    }
+
+    suspend fun connect(url: String) {
         ready = CompletableDeferred()
         val request = Request.Builder().url(url).build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -81,6 +97,12 @@ class TransferClient(
                 if (envelope.type == "cancel") cancelledByServer = true
                 Log.d("TransferServer", "onMessage ${envelope.type}")
                 if (envelope.type == "hello_ack") ready.complete(Unit)
+                if (envelope.type == "transfer_complete") {
+                    val data = Json.decodeFromJsonElement<CompleteData>(envelope.data)
+                    Log.d("TransferClient", "transfer_complete ${data.transferId} ${data.hash}")
+                    hashWaiters[data.transferId]?.complete(data.hash)
+                    return
+                }
                 val waiter = pending[envelope.id]
                 if (waiter != null) {
                     waiter.complete(envelope)
@@ -91,20 +113,28 @@ class TransferClient(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                ready.completeExceptionally(IOException("Closed before hello_ack"))
                 Log.d("TransferClient", "onClosing code $code reason $reason")
             } // lets lock in
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                ready.completeExceptionally(IOException("Closed before helloack"))
                 //lemme make a coffee first chat
                 Log.d("TransferClient", "onClosed code=$code reason=$reason")
+                hashWaiter.values.forEach { it.completeExceptionaly(IOException("Connection closed")) }
+                hashWaiters.clear()
                 serverMessages.close()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                ready.completeExceptionally(t)
                 Log.e("TransferClient", "onFailiure", t)
+                hashWaiters.values.forEach { it.completeExceptionaly(IOException("Connection failed")) }
+                hashWaiters.clear()
                 serverMessages.close()
             }
         })
+        ready.await()
     }
 
     fun close() {
@@ -132,6 +162,29 @@ class TransferClient(
         val ack = Json.decodeFromJsonElement<OfferAckData>(response.data)
         check(ack.accepted) { "server declined offer_files" }
         return ack
+    }
+
+    enum class VerifyResult {
+        Verified, Mismatch, NoReply
+    }
+
+    suspend fun verifyTransfer(
+        transferId: String,
+        waiter: CompletableDeferred<List<HashData>>,
+        local: Map<String, String>
+    ) : VerifyResult {
+        val remote = try {
+            withTimeoutOrNull(10_000) { waiter.await()}
+        } catch (e: IOException) {
+            null
+        } finally {
+            removeHashWaiter(transferId)
+        }
+        if (remote == null) return VerifyResult.Noreply
+
+        val remoteMap = remote.associate { it.fileId to it.sha256.lowercase() }
+        val localMap = local.mapValues { it.value.lowercase() }
+        return if (remoteMap == localMap) VerifyResult.Verified else VerifyResult.Mismatch
     }
 
     suspend fun request(type: String, data: JsonElement, timeoutMs: Long = 5000): Envelope {
@@ -199,14 +252,14 @@ class TransferClient(
         onWaiting: () -> Unit = {},
         onAccepted: () -> Unit = {},
         onProgress: (Long) -> Unit = {}
-    ) {
+    ): VerifyResult {
         var sentTotal = 0L
         cancelledByServer = false
         while (serverMessages.tryReceive().isSuccess) { }
 
+        var localHashes = mutableMapOf<String, String>()
         var finished = false
         try {
-            withTimeout(5000) { ready.await() } // <- this lil bitchass is closing my webhsocket
             val ws = webSocket ?: error("Not connected")
             offered.clear()
             val infos = picked.mapIndexed { i, p ->
@@ -223,26 +276,35 @@ class TransferClient(
             val req = awaitServerMessage("request_files")
             val wanted = Json.decodeFromJsonElement<RequestFilesData>(req.data)
 
-            for (id in wanted.fileIds) {
-                val file = offered[id] ?: error("Server asked for unknown file $id")
-                sendFile(resolver, file, id) { n ->
+            for (id in waned.fileIds) {
+                val file = offered[id] ?: error ("Server requested unknown file_id $id")
+                localHashes[id] = sendFile(resolver, file, id) { n ->
                     sentTotal += n
                     onProgress(sentTotal)
                 }
             }
 
-            if (ws.queueSize() > 0) delay(10)
-            Log.d("TransferServer", "Qeuse drained")
+            if (ws.qeueSize > 0) delay(10)
+            Log.d("TransferClient", "qeue drained")
             val totalBytes = wanted.fileIds.sumOf { id -> offered[id]?.size ?: 0L }
-            val timeoutMs: Long = calscTimeoutMs(totalBytes)
+            val timeoutMs = calscTimeoutMs(totalBytes)
 
-            Log.d("TransferServer", "waiting for transfer complete wioth timneout $timeoutMs")
+            Log.d("TransferClient", "waiting for transfer_complete, timeoutMs=$timeoutMs")
             val done = awaitServerMessage("transfer_complete", timeoutMs)
-            Log.d("TransferClient", "server says:  ${done.type} ${done.data}")
+            Log.d("TransferClient", "server says: ${done.type} ${done.data}")
+
+            val complete = Json.decodeFromJsonElement<CompleteData>(done.data)
+            val remote = complete.hash.associate { it.fileId to it.sha256.lowercase() }
+            val local = localHashes.mapValues { it.value.lowercase() }
+            val result = if (remote == local) VerifyResult.Verified else VerifyResult.Mismatch
+            Log.d("TransferClient", "verify result=$result")
+
             finished = true
+            return result 
         } finally {
             if (!finished) sendCancel()
         }
+
     }
 
     //i genuenlymlove macondo, thanks to them i have thing at age i could never afford :)
@@ -252,18 +314,18 @@ class TransferClient(
         picked: PickedFile,
         fileId: String,
         onBytes: (Int) -> Unit
-    ) {
+    ): String {
         val ws = webSocket ?: error("Not connected")
+        val digest = MessageDigest.getInstance("SHA-256")
 
         if (picked.size == 0L) {
             ws.send(buildChunk(fileId, 0L, FLAG_LAST, ByteArray(0)).toByteString())
-            return
+            return digest.digest().toHex()
         }
 
         val buffer = ByteArray(64 * 1024)
         var offset = 0L
         val input = resolver.openInputStream(picked.uri) ?: error("Cannot open ${picked.name}")
-        //my fuckass cat stepped on my keyboared AGAIN
 
         input.use {
             while (true) {
@@ -271,16 +333,20 @@ class TransferClient(
                 if (cancelledByServer) throw TransferCancelledException()
                 val n = it.read(buffer)
                 if (n <= 0) break
+                digest.update(buffer, 0, n)
                 val isLast = offset + n == picked.size
-                val flags = if (isLast) FLAG_LAST else 0 //hmmm, this is weird
+                val flags = if (isLast) FLAG_LAST else 0
                 while (ws.queueSize() > 4L * 1024 * 1024) delay(10)
-                var ret = ws.send(buildChunk(fileId, offset, flags, buffer.copyOf(n)).toByteString())
+                val ret = ws.send(buildChunk(fileId, offset, flags, buffer.copyOf(n)).toByteString())
                 Log.d("TransferClient", "send returned $ret")
                 offset += n
                 onBytes(n)
-            }
+            } 
         }
+        return digest.digest().toHex()
     }
+
+    private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
 
     private fun calscTimeoutMs(totalBytes: Long): Long {
         val TimeoutBaseMs = 5_000L

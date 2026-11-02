@@ -49,7 +49,7 @@ echo "==> STARTING APP LOGCAT"
 PACKAGE="org.dpdns.sebastianfiser.filetransferer"
 DEVICE="${DEVICES[0]}"
 
-"$ADB" -s "$DEVICE" logcat -c
+"$ADB" -s "$DEVICE" logcat -c -s Nsd TransferClient
 "$ADB" -s "$DEVICE" shell am force-stop "$PACKAGE"
 "$ADB" -s "$DEVICE" shell monkey -p "$PACKAGE" 1 >/dev/null 2>&1
 

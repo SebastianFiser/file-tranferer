@@ -50,6 +50,18 @@ data class RequestFilesData(
 )
 
 @Serializable
+data class CompleteData(
+    @SerialName("transfer_id") val transferId: String,
+    @SerialName("hash") val hash: List<HashData>
+)
+
+@Serializable
+data class HashData(
+    @SerialName("file_id") val fileId: String,
+    @SerialName("hash") val hash: String
+)
+
+@Serializable
 data class ErrorData(
     val code: String,
     val message: String

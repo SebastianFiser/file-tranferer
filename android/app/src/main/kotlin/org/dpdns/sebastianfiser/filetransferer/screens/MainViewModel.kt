@@ -68,11 +68,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             c.close()
             throw e
         } catch (e: Exception) {
-            c.close()
-            false
+            null
         }
-        return if (ok == true) c else null
+        if (ok == true) return c
+        c.close()
+        return null
     } 
+
 
     fun connect() {
         if (_uiState.value is TransferUiState.Connecting ||
@@ -83,37 +85,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = TransferUiState.Connecting
 
         viewModelScope.launch {
-            var newClient: TransferClient? = null
             try {
                 _uiState.value = TransferUiState.Searching
-                var saved = lastServerStore.load()
-                var cTry: TransferClient? = null
+
+                var url: String? = null
+                var connected: TransferClient? = null
+
+                val saved = lastServerStore.load()
                 if (saved != null) {
-                    cTry = tryConnect(saved)
-                    client = cTry
-                    _uiState.value = TransferUiState.Connected(saved)
+                    connected = tryConnect(saved)
+                    if (connected != null) url = saved
+                }
+
+                if (connected == null) {
+                    val server = ServerDiscovery(getApplication<Application>()).find()
+                    if (server != null) {
+                        val found = "ws://${formatUrl(server.host)}:${server.port}/ws"
+                        connected = tryConnect(found)
+                        if (connected != null) url = found
+                    }
+                }
+
+                if (connected == null || url == null) {
+                    _uiState.value = TransferUiState.Error(ErrorKind.ServerUnreachable)
                     return@launch
                 }
-                val server = ServerDiscovery(getApplication<Application>()).find()
-                    ?: throw IllegalStateException("Server not found")
-                val Url = if (server != null) "ws://${formatUrl(server.host)}:${server.port}/ws" else throw IllegalStateException("Server not found")
-                val c = TransferClient(deviceName)
-                client = c
-                c.connect(Url)
-                client = c
-                _uiState.value = TransferUiState.Connected(server?.host ?: "unknown")
-                lastServerStore.save(Url)
+
+                client = connected
+                _uiState.value = TransferUiState.Connected(Uri.parse(url).host ?: url)
+                lastServerStore.save(url)
             } catch (e: CancellationException) {
-                newClient?.close()
                 throw e
             } catch (e: Exception) {
-                newClient?.close()
                 client = null
-                if (e is ServerException) {
-                    _uiState.value = TransferUiState.Error(ErrorKind.ServerUnreachable)
-                } else {
-                    _uiState.value = TransferUiState.Error(ErrorKind.Unknown)
-                }
+                _uiState.value = TransferUiState.Error(ErrorKind.Unknown)
             }
         }
 
@@ -133,6 +138,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         closeClient()
+    }
+
+    fun onSharedFiles(uris: List<Uri>) {
+        var pendingUris: List<Uri> = emptyList()
+
+        if (_uiState.value is TransferUiState.Connected) {
+            sendFile(uris)
+        } else {
+            pendingUris = uris
+            viewModelScope.launch {
+                val cl = tryConnect(lastServerStore.load() ?: "")
+                if (cl != null) {
+                    client = cl
+                    _uiState.value = TransferUiState.Connected(lastServerStore.load() ?: "")
+                    sendFile(pendingUris)
+                } else {
+                    _uiState.value = TransferUiState.Error(ErrorKind.ServerUnreachable)
+                }
+            }
+        }
     }
 
     fun sendFile(uris: List<Uri>) {

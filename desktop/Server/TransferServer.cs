@@ -424,7 +424,7 @@ public class TransferServer
             transfer_id = transferId,
             hash = hashes
         });
-
+        
         Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} sending transfer_complete");
 
         return new Message("0", "transfer_complete", data);

@@ -16,7 +16,12 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.IntentCompat
+import androidx.activity.viewModels
 
+import org.dpdns.sebastianfiser.filetransferer.screens.MainViewModel
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.screens.MainScreen
 
@@ -24,6 +29,7 @@ import org.dpdns.sebastianfiser.filetransferer.screens.MainScreen
 class MainActivity : ComponentActivity() {
 
     private lateinit var transferClient: TransferClient
+    private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,6 +41,41 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 MainScreen(transferClient)
             }
+        }
+
+        if (savedInstanceState == null) {
+            handleIntent(intent)
+        }
+        
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        val uris: List<Uri> = when (intent.action) {
+            Intent.ACTION_SEND -> {
+                val uri: Uri? = IntentCompat.getParcelableExtra(
+                    intent, Intent.EXTRA_STREAM, Uri::class.java
+                )
+                listOfNotNull(uri)
+            }
+            Intent.ACTION_SEND_MULTIPLE -> {
+                val list: ArrayList<Uri>? = IntentCompat.getParcelableArrayListExtra(
+                    intent, Intent.EXTRA_STREAM, Uri::class.java
+                )
+                list ?: emptyList()
+            }
+            else -> {
+                emptyList()
+            }
+        }
+        if (uris.isNotEmpty()) {
+            viewModel.onSharedFiles(uris)
         }
     }
 
