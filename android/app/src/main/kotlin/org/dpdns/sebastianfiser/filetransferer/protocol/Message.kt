@@ -58,7 +58,7 @@ data class CompleteData(
 @Serializable
 data class HashData(
     @SerialName("file_id") val fileId: String,
-    @SerialName("hash") val hash: String
+    @SerialName("sha256") val sha256: String
 )
 
 @Serializable

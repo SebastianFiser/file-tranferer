@@ -24,8 +24,8 @@ import java.nio.ByteOrder
 import android.content.ContentResolver
 import kotlinx.coroutines.delay
 import java.io.IOException
-import java.util.concurrent.ConcurrentHashMap
 import java.security.MessageDigest
+import kotlinx.coroutines.withTimeoutOrNull
 
 import org.dpdns.sebastianfiser.filetransferer.protocol.RequestFilesData
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
@@ -56,8 +56,7 @@ class TransferClient(
     private val client = OkHttpClient()
     private var webSocket: WebSocket? = null
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Envelope>>()
-    private val hashWaiters = ConcurreentHashMap<String, CompletableDeferred<List<HashData>>>()
-
+    
     @Volatile
     private var ready = CompletableDeferred<Unit>()
 
@@ -69,15 +68,6 @@ class TransferClient(
 
     private val offered = ConcurrentHashMap<String, PickedFile>()
 
-    fun registerHashWaiter(transferId: String): CompletableDeferred<List<HashData>> {
-        val d = CompletableDeferred<List<HashData>>()
-        hashWaiters[transferId] = d
-        return d
-    }
-
-    fun removeHashWaiter(transferId: String) {
-        hashWaiters.remove(transferId)
-    }
 
     suspend fun connect(url: String) {
         ready = CompletableDeferred()
@@ -97,12 +87,6 @@ class TransferClient(
                 if (envelope.type == "cancel") cancelledByServer = true
                 Log.d("TransferServer", "onMessage ${envelope.type}")
                 if (envelope.type == "hello_ack") ready.complete(Unit)
-                if (envelope.type == "transfer_complete") {
-                    val data = Json.decodeFromJsonElement<CompleteData>(envelope.data)
-                    Log.d("TransferClient", "transfer_complete ${data.transferId} ${data.hash}")
-                    hashWaiters[data.transferId]?.complete(data.hash)
-                    return
-                }
                 val waiter = pending[envelope.id]
                 if (waiter != null) {
                     waiter.complete(envelope)
@@ -121,16 +105,12 @@ class TransferClient(
                 ready.completeExceptionally(IOException("Closed before helloack"))
                 //lemme make a coffee first chat
                 Log.d("TransferClient", "onClosed code=$code reason=$reason")
-                hashWaiter.values.forEach { it.completeExceptionaly(IOException("Connection closed")) }
-                hashWaiters.clear()
                 serverMessages.close()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 ready.completeExceptionally(t)
                 Log.e("TransferClient", "onFailiure", t)
-                hashWaiters.values.forEach { it.completeExceptionaly(IOException("Connection failed")) }
-                hashWaiters.clear()
                 serverMessages.close()
             }
         })
@@ -165,26 +145,7 @@ class TransferClient(
     }
 
     enum class VerifyResult {
-        Verified, Mismatch, NoReply
-    }
-
-    suspend fun verifyTransfer(
-        transferId: String,
-        waiter: CompletableDeferred<List<HashData>>,
-        local: Map<String, String>
-    ) : VerifyResult {
-        val remote = try {
-            withTimeoutOrNull(10_000) { waiter.await()}
-        } catch (e: IOException) {
-            null
-        } finally {
-            removeHashWaiter(transferId)
-        }
-        if (remote == null) return VerifyResult.Noreply
-
-        val remoteMap = remote.associate { it.fileId to it.sha256.lowercase() }
-        val localMap = local.mapValues { it.value.lowercase() }
-        return if (remoteMap == localMap) VerifyResult.Verified else VerifyResult.Mismatch
+        Verified, Mismatch
     }
 
     suspend fun request(type: String, data: JsonElement, timeoutMs: Long = 5000): Envelope {
@@ -276,7 +237,7 @@ class TransferClient(
             val req = awaitServerMessage("request_files")
             val wanted = Json.decodeFromJsonElement<RequestFilesData>(req.data)
 
-            for (id in waned.fileIds) {
+            for (id in wanted.fileIds) {
                 val file = offered[id] ?: error ("Server requested unknown file_id $id")
                 localHashes[id] = sendFile(resolver, file, id) { n ->
                     sentTotal += n
@@ -284,28 +245,35 @@ class TransferClient(
                 }
             }
 
-            if (ws.qeueSize > 0) delay(10)
+            if (ws.queueSize() > 0) delay(10)
             Log.d("TransferClient", "qeue drained")
             val totalBytes = wanted.fileIds.sumOf { id -> offered[id]?.size ?: 0L }
             val timeoutMs = calscTimeoutMs(totalBytes)
 
             Log.d("TransferClient", "waiting for transfer_complete, timeoutMs=$timeoutMs")
-            val done = awaitServerMessage("transfer_complete", timeoutMs)
+            val t0 = System.currentTimeMillis()
+            val done = try {
+                awaitServerMessage("transfer_complete", timeoutMs)
+            } catch (e: Exception) {
+                Log.e("TransferClient", "waiting for transfer_complete failed after ${System.currentTimeMillis() - t0} ms", e)
+                throw e
+            }
             Log.d("TransferClient", "server says: ${done.type} ${done.data}")
 
             val complete = Json.decodeFromJsonElement<CompleteData>(done.data)
             val remote = complete.hash.associate { it.fileId to it.sha256.lowercase() }
             val local = localHashes.mapValues { it.value.lowercase() }
             val result = if (remote == local) VerifyResult.Verified else VerifyResult.Mismatch
-            Log.d("TransferClient", "verify result=$result")
+            Log.d("TransferClient", "verify remote=$remote local=$local result=$result")
+
 
             finished = true
             return result 
         } finally {
             if (!finished) sendCancel()
         }
-
     }
+
 
     //i genuenlymlove macondo, thanks to them i have thing at age i could never afford :)
 
@@ -349,7 +317,7 @@ class TransferClient(
     private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
 
     private fun calscTimeoutMs(totalBytes: Long): Long {
-        val TimeoutBaseMs = 5_000L
+        val TimeoutBaseMs = 15_000L
         val BytesPerBase = 1 * 1024L * 1024L  //this will prolly ba aight
 
         return TimeoutBaseMs + totalBytes * 1000L / BytesPerBase
