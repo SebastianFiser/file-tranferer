@@ -32,4 +32,15 @@
     <string name="method_wifi_desc">Computer and phone must be on the same Wi-Fi network</string>
     <string name="method_cable">Cable</string>
     <string name="method_cable_desc">Use a USB cable to connect your computer and phone</string>
+    <string name="state_searching_hint_cable">Make sure the other device is connected via USB and has the app open.</string>
+    <string name="state_searching_hint_wifi">Make sure the other device is on the same Wi-Fi network and has the app open.</string>
+    <string name="state_notfound_tip_server">Make sure the other device is on the same network and has the app open.</string>
+    <string name="state_notfound_tip_cable">Make sure the other device is connected via USB and has the app open.</string>
+    <string name="state_notfound_tip_wifi">Make sure the other device is on the same Wi-Fi network and has the app open.</string>
+    <string name="state_notfound_tip_firewall">Make sure your firewall is not blocking the connection.</string>
+    <string name="action_back">Back</string>
+    <string name="state_mismatch_title">Transfer may be damaged</string>
+    <string name="state_mismatch_hint"> Server checksum does not match, please try again.</string>
+    <string name="state_verified_hint"> Server checksum matches, transfer is verified.</string>
+    <string name="transfer_done_summary">Sent %1$d files (%2$s)</string>
 </resources>

@@ -39,6 +39,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var client: TransferClient? = null
     private var transferJob: Job? = null
     private val lastServerStore = LastServerStore(application)
+
+    private val _method = MutableStateFlow(SendMethod.Wifi)
+    val method: StateFlow<SendMethod> = _method.asStateFlow()
+    private var serverLabel = ""
+    private var pendingUris: List<Uri> = emptyList()
  
 
     private val deviceName = "${Build.MODEL}[${
@@ -54,7 +59,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun backToConnected() {
-        _uiState.value = TransferUiState.Connected(deviceName)
+        _uiState.value = TransferUiState.Connected(serverLabel)
     }
 
     private suspend fun tryConnect(url: String): TransferClient? {
@@ -76,17 +81,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     } 
 
 
-    fun connect() {
-        if (_uiState.value is TransferUiState.Connecting ||
+
+    fun connect(method: SendMethod = _method.value) {
+        if (_uiState.value is TransferUiState.Searching ||
+            _uiState.value is TransferUiState.Connecting ||
             _uiState.value is TransferUiState.Connected
         ) {
             return
         }
-        _uiState.value = TransferUiState.Connecting
+        _method.value = method
+        _uiState.value = TransferUiState.Searching
 
         viewModelScope.launch {
             try {
-                _uiState.value = TransferUiState.Searching
 
                 var url: String? = null
                 var connected: TransferClient? = null
@@ -107,16 +114,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (connected == null || url == null) {
-                    _uiState.value = TransferUiState.Error(ErrorKind.ServerUnreachable)
+                    pendingUris = emptyList()
+                    _uiState.value = TransferUiState.NotFound
                     return@launch
                 }
 
+                closeClient()
                 client = connected
-                _uiState.value = TransferUiState.Connected(Uri.parse(url).host ?: url)
+                serverLabel = Uri.parse(url).host ?: url
+                _uiState.value = TransferUiState.Connected(serverLabel)
                 lastServerStore.save(url)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                pendingUris = emptyList()
                 client = null
                 _uiState.value = TransferUiState.Error(ErrorKind.Unknown)
             }
@@ -141,22 +152,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onSharedFiles(uris: List<Uri>) {
-        var pendingUris: List<Uri> = emptyList()
-
-        if (_uiState.value is TransferUiState.Connected) {
+        val s = _uiState.value
+        if (s is TransferUiState.Connected || s is TransferUiState.Done) {
             sendFile(uris)
         } else {
             pendingUris = uris
-            viewModelScope.launch {
-                val cl = tryConnect(lastServerStore.load() ?: "")
-                if (cl != null) {
-                    client = cl
-                    _uiState.value = TransferUiState.Connected(lastServerStore.load() ?: "")
-                    sendFile(pendingUris)
-                } else {
-                    _uiState.value = TransferUiState.Error(ErrorKind.ServerUnreachable)
-                }
-            }
+            connect(SendMethod.Wifi)
         }
     }
 
@@ -185,7 +186,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 var lastBytes = 0L
                 var speed = 0.0 //B.s smoothsajbcsal
                 var startedAt = 0L
-                c.sendPickedFiles(
+                val verify = c.sendPickedFiles(
                     resolver, files,
                     onWaiting = { _uiState.value = TransferUiState.WaitingForConfirmation},
                     onAccepted = { 
@@ -218,7 +219,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 )
 
-                _uiState.value = TransferUiState.Done(files.size, total)
+                _uiState.value = TransferUiState.Done(files.size, total, verify)
             } catch (e: ServerException){
                 _uiState.value = when (e.code) {
                     "offer_rejected" -> TransferUiState.Rejected

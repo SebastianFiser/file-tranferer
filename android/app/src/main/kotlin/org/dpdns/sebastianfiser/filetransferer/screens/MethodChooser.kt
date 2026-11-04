@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 
 import org.dpdns.sebastianfiser.filetransferer.R
 
-enum class SendMethod { WiFi, Cable }
+enum class SendMethod { Wifi, Cable }
 
 @Composable
 fun MethodChooser(
@@ -32,7 +32,7 @@ fun MethodChooser(
         MethodCard(
             title = stringResource(R.string.method_wifi),
             description = stringResource(R.string.method_wifi_desc),
-            onClick = { onChoose(SendMethod.WiFi) }
+            onClick = { onChoose(SendMethod.Wifi) }
         )
         Spacer(modifier = Modifier.height(16.dp))
         MethodCard(

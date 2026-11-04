@@ -1,5 +1,7 @@
 package org.dpdns.sebastianfiser.filetransferer.screens
 
+import org.dpdns.sebastianfiser.filetransferer.network.VerifyResult
+
 import androidx.annotation.StringRes
 import org.dpdns.sebastianfiser.filetransferer.R
 sealed interface TransferUiState {
@@ -27,7 +29,8 @@ sealed interface TransferUiState {
 
     data class Done(
         val fileCount: Int,
-        val totalBytes: Long
+        val totalBytes: Long,
+        val verify: VerifyResult
     ) : TransferUiState
 
     data class Error(

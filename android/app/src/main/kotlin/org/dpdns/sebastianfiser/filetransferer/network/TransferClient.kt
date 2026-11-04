@@ -50,6 +50,8 @@ class ServerException(
 
 class TransferCancelledException : Exception("Transfer cancelled by server")
 
+enum class VerifyResult { Verified, Mismatch }
+
 class TransferClient(
     private val deviceName: String
 ) {
@@ -143,10 +145,7 @@ class TransferClient(
         check(ack.accepted) { "server declined offer_files" }
         return ack
     }
-
-    enum class VerifyResult {
-        Verified, Mismatch
-    }
+   
 
     suspend fun request(type: String, data: JsonElement, timeoutMs: Long = 5000): Envelope {
         val id = UUID.randomUUID().toString()

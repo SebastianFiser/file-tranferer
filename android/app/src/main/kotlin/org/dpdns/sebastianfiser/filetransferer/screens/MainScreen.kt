@@ -36,6 +36,7 @@ fun MainScreen(transferClient: TransferClient) {
 
     val vm: MainViewModel = viewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val method by vm.method.collectAsStateWithLifecycle()
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -50,10 +51,12 @@ fun MainScreen(transferClient: TransferClient) {
         } else {
             StateContent(
                 s = state,
+                method = method,
                 onPick = { picker.launch(arrayOf("*/*")) },
                 onRetry = { vm.connect() },
                 onCancel = { vm.cancelTransfer() },
-                onSendMore = { vm.backToConnected() }
+                onSendMore = { vm.backToConnected() },
+                onBack = { vm.disconnect() }
             )
         }
 
