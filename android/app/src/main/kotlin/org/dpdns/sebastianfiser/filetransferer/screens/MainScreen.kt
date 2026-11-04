@@ -43,20 +43,19 @@ fun MainScreen(transferClient: TransferClient) {
         if (uris.isNotEmpty()) vm.sendFile(uris)
     }
 
-    LaunchedEffect(Unit) {
-        if (vm.uiState.value is TransferUiState.Idle) {
-            vm.connect()
-        }
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        StateContent(
-            s = state,
-            onPick = { picker.launch(arrayOf("*/*")) },
-            onRetry = { vm.connect() },
-            onCancel = { vm.cancelTransfer() },
-            onSendMore = { vm.backToConnected() }
-        )
+        if (state is TransferUiState.Idle) {
+            MethodChooser(onChoose = { vm.connect()})
+        } else {
+            StateContent(
+                s = state,
+                onPick = { picker.launch(arrayOf("*/*")) },
+                onRetry = { vm.connect() },
+                onCancel = { vm.cancelTransfer() },
+                onSendMore = { vm.backToConnected() }
+            )
+        }
 
         if (state is TransferUiState.Connected || state is TransferUiState.Done) {
             TextButton(

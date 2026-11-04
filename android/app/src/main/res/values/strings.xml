@@ -27,4 +27,9 @@
     <string name="transfer_speed">%1$s/s</string>
     <string name="transfer_eta">estimated time remaining: %1$s</string>
     <string name="state_done_summary">Sent %1$d files (%2$s)</string>;
+    <string name="choose_method_title">Send Via</string>
+    <string name="method_wifi">Wi-Fi</string>
+    <string name="method_wifi_desc">Computer and phone must be on the same Wi-Fi network</string>
+    <string name="method_cable">Cable</string>
+    <string name="method_cable_desc">Use a USB cable to connect your computer and phone</string>
 </resources>

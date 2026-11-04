@@ -24,6 +24,7 @@ import androidx.activity.viewModels
 import org.dpdns.sebastianfiser.filetransferer.screens.MainViewModel
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.screens.MainScreen
+import org.dpdns.sebastianfiser.filetransferer.ui.theme.FileTransfererTheme
 
 
 class MainActivity : ComponentActivity() {
@@ -38,7 +39,7 @@ class MainActivity : ComponentActivity() {
         transferClient = TransferClient("${Build.MODEL}[$androidId]")
 
         setContent {
-            MaterialTheme {
+            FileTransfererTheme {
                 MainScreen(transferClient)
             }
         }
