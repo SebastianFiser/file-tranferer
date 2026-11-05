@@ -119,9 +119,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                closeClient()
-                client = connected
-                serverLabel = Uri.parse(url).host ?: url
+                finishConnect(connected, url)
                 _uiState.value = TransferUiState.Connected(serverLabel)
                 lastServerStore.save(url)
             } catch (e: CancellationException) {
@@ -134,6 +132,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     }
+
+    private suspend fun finishConnect(c: TransferClient, url: String) {
+        closeClient()
+        client = c
+        serverLabel = Uri.parse(url).host ?: url
+        _uiState.value = TransferUiState.Connected(serverLabel)
+
+        val pending = pendingUris
+        pendingUris = emptyList()
+        if (pending.isNotEmpty()) {
+            sendFile(pending)
+        }
+    }
+
+    fun connectManual(url: String) {
+        val s = _uiState.value
+        if (s is TransferUiState.Searching ||
+            s is TransferUiState.Connecting ||
+            s is TransferUiState.Connected
+        ) return
+        _uiState.value = TransferUiState.Searching
+
+        viewModelScope.launch {
+            try {
+                val c = tryConnect(url)
+                if (c == null) {
+                    _uiState.value = TransferUiState.NotFound
+                    return@launch
+                }
+                finishConnect(c, url)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e : Exception) {
+                _uiState.value = TransferUiState.Error(ErrorKind.Unknown)
+            }
+        }
+
+    } 
 
     fun disconnect() {
         transferJob?.cancel()
@@ -181,7 +217,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val total = files.sumOf { it.size }
                 val ends = files.runningFold(0L) { acc, f -> acc + f.size }.drop(1)
 
-                _uiState.value = TransferUiState.Transferring(0, total, 0, files.size)
                 var lastUpdate = 0L
                 var lastBytes = 0L
                 var speed = 0.0 //B.s smoothsajbcsal

@@ -24,7 +24,8 @@ sealed interface TransferUiState {
         val fileIndex: Int,
         val fileCount: Int,
         val speedBps: Long = 0,
-        val etaSeconds: Long = -1
+        val etaSeconds: Long = -1,
+        val currentName: String = ""
     ) : TransferUiState
 
     data class Done(

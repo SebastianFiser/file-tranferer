@@ -56,7 +56,8 @@ fun MainScreen(transferClient: TransferClient) {
                 onRetry = { vm.connect() },
                 onCancel = { vm.cancelTransfer() },
                 onSendMore = { vm.backToConnected() },
-                onBack = { vm.disconnect() }
+                onBack = { vm.disconnect() },
+                onManualConnect = { vm.connectManual(it) }
             )
         }
 

@@ -9,7 +9,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 
+import org.dpdns.sebastianfiser.filetransferer.network.parseServerAddress
 import org.dpdns.sebastianfiser.filetransferer.R
 import org.dpdns.sebastianfiser.filetransferer.protocol.formatBytes
 import org.dpdns.sebastianfiser.filetransferer.protocol.formatEta
@@ -21,7 +29,8 @@ import org.dpdns.sebastianfiser.filetransferer.ui.theme.WarningAmber
 @Composable
 private fun BigButton(
     text: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     Button(
         onClick = onClick,
@@ -35,6 +44,29 @@ private fun BigButton(
 }
 
 @Composable
+private fun ManualAddress(onConnect: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val url = parseServerAddress(text)
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { text = it },
+        label = { Text(stringResource(R.string.manual_address_label)) },
+        supportingText = { Text(stringResource(R.string.manual_address_hint)) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    )
+    BigButton(
+        text = stringResource(R.string.action_connect),
+        onClick = { if (url != null) onConnect(url) },
+        enabled = url != null
+    )
+}
+
+@Composable
 fun StateContent(
     s:TransferUiState,
     method: SendMethod,
@@ -42,7 +74,8 @@ fun StateContent(
     onRetry: () -> Unit,
     onCancel: () -> Unit,
     onSendMore: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onManualConnect: (String) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -83,6 +116,8 @@ fun StateContent(
                 )
             }
             is TransferUiState.NotFound -> {
+                var manual by remember { mutableStateOf(false) }
+
                 Spacer(Modifier.height(16.dp))
                 Text(stringResource(R.string.state_notfound_tip_server), textAlign = TextAlign.Center)
                 Text(
@@ -93,15 +128,33 @@ fun StateContent(
                     textAlign = TextAlign.Center
                 )
                 Text(stringResource(R.string.state_notfound_tip_firewall), textAlign = TextAlign.Center)
-                BigButton(stringResource(R.string.action_retry), onRetry)
+
+                if (manual) {
+                    ManualAddress(onManualConnect)
+                } else {
+                    BigButton(stringResource(R.string.action_retry), onRetry)
+                    TextButton(onClick = { manual = true }) {
+                        Text(stringResource(R.string.action_enter_address))
+                    }
+                }
                 TextButton(onClick = onBack) {
                     Text(stringResource(R.string.action_back))
                 }
+
             }
-            is TransferUiState.Connected -> BigButton(stringResource(R.string.action_pick_file), onPick)
+            is TransferUiState.Connected -> {
+                BigButton(stringResource(R.string.action_pick_file), onPick)
+                Text(
+                    stringResource(R.string.state_connected_hint),
+                    textAlign = TextAlign.Center
+                )
+            }
             is TransferUiState.Transferring -> {
+                if (s.currentName.isNotEmpty()) {
+                    Text(s.currentName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 val fraction = if (s.totalBytes > 0 ) s.bytesSent.toFloat() / s.totalBytes else 0f
-                LinearProgressIndicator(progress = fraction, modifier = Modifier.fillMaxWidth())
+                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
                 Text("${(fraction * 100).toInt()} %")
                 Text("${formatBytes(s.bytesSent)} / ${formatBytes(s.totalBytes)}")
                 if (s.speedBps > 0) {

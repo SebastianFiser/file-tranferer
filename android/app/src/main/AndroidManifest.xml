@@ -6,6 +6,7 @@
         android:label="filetransferer"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:usesCleartextTraffic="true"
+        android:localeConfig="@xml/locales_config"
     >
         <activity android:name=".MainActivity"
             android:exported="true"
