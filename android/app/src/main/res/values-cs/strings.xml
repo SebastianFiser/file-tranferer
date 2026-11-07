@@ -48,4 +48,22 @@
     <string name="manual_address_hint">Například: 192.168.1.20 nebo 192.168.1.20:5000</string>
     <string name="action_connect">Připojit</string>
     <string name="state_connected_hint">Můžete také sdílet soubory přímo z vaší galerie</string>
+    <string name="nav_home">Domů</string>
+    <string name="nav_history">Historie</string>
+    <string name="nav_settings">Nastavení</string>
+    <string name="nav_help">Pomoc</string>
+    <string name="action_menu">Otevřít menu</string>
+    <string name="settings_forget_server">Zapomenout uložené počítače</string>
+    <string name="settings_forgotten">Zapomenuto</string>
+    <string name="settings_forget_server_hint">Aplikace bude hledat počítač příště znovu</string>
+    <string name="settings_language">Jazyk aplikace</string>
+    <string name="history_clear">Vyčistit</string>
+    <string name="history_empty">Zatím žádné přenosy</string>
+    <string name="history_verified">Ověřeno</string>
+    <string name="history_mismatch">Ověření selhalo</string>
+    <plurals name="history_files">
+        <item quantity="one">%d soubor</item>
+        <item quantity="few">%d soubory</item>
+        <item quantity="other">%d souborů</item>
+    </plurals>
 </resources>

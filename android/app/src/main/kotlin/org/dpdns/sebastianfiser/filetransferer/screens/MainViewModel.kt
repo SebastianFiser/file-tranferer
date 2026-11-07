@@ -19,6 +19,8 @@ import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 
 import org.dpdns.sebastianfiser.filetransferer.R
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
@@ -28,7 +30,10 @@ import org.dpdns.sebastianfiser.filetransferer.network.ServerException
 import org.dpdns.sebastianfiser.filetransferer.network.TransferCancelledException
 import org.dpdns.sebastianfiser.filetransferer.network.LastServerStore
 import org.dpdns.sebastianfiser.filetransferer.protocol.formatBytes
-
+import org.dpdns.sebastianfiser.filetransferer.network.VerifyResult
+import org.dpdns.sebastianfiser.filetransferer.network.HistoryStore
+import org.dpdns.sebastianfiser.filetransferer.network.HistoryEntry
+import org.dpdns.sebastianfiser.filetransferer.screens.AppScreen
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     //holds app states and variables that have to survive recompose of screens
@@ -44,13 +49,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val method: StateFlow<SendMethod> = _method.asStateFlow()
     private var serverLabel = ""
     private var pendingUris: List<Uri> = emptyList()
- 
+    private val _screen = MutableStateFlow(AppScreen.Home)
+    val screen: StateFlow<AppScreen> = _screen.asStateFlow()
+
+    private val historyStore = HistoryStore(application)
+
+    val history: StateFlow<List<HistoryEntry>> = historyStore.entries
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun openScreen(s: AppScreen) {
+        _screen.value = s 
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            historyStore.clear()
+        }
+    }
 
     private val deviceName = "${Build.MODEL}[${
         Settings.Secure.getString(
             getApplication<Application>().contentResolver, Settings.Secure.ANDROID_ID
         )
     }]"
+
+    fun backToNotFound() {
+        _uiState.value = TransferUiState.NotFound
+    }
+
+    fun forgetServer() {
+        viewModelScope.launch { lastServerStore.clear()}
+    }
+
 
     fun cancelTransfer() {
         transferJob?.cancel()
@@ -255,6 +285,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 _uiState.value = TransferUiState.Done(files.size, total, verify)
+                historyStore.add(
+                    HistoryEntry(
+                        System.currentTimeMillis(), files.size, total, verify == VerifyResult.Verified, serverLabel
+                    )
+                )
             } catch (e: ServerException){
                 _uiState.value = when (e.code) {
                     "offer_rejected" -> TransferUiState.Rejected

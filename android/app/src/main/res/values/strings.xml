@@ -48,4 +48,21 @@
     <string name="manual_address_hint">For example: 192.168.1.20 or 192.168.1.20:5000</string>
     <string name="action_connect">Connect</string>
     <string name="state_connected_hint">You can also share files directly from your gallery</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_history">History</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_help">Help</string>
+    <string name="action_menu">Open menu</string>
+    <string name="settings_forget_server">Forget saved computer</string>
+    <string name="settings_forgotten">Forgotten</string>
+    <string name="settings_forget_server_hint">App will search for a computer again next time</string>
+    <string name="settings_language">App language</string>
+    <string name="history_clear">Clear</string>
+    <string name="history_empty">No transfers yet</string>
+    <string name="history_verified">Verfied</string>
+    <string name="history_mismatch">Verification Failed</string>
+    <plurals name="history_files">
+        <item quantity="one">%d file</item>
+        <item quantity="other">%d files</item>
+    </plurals>
 </resources>

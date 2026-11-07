@@ -6,7 +6,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.edit
 
-private val Context.dataStore by preferencesDataStore(name = "settings")
+internal val Context.dataStore by preferencesDataStore(name = "settings")
 
 class LastServerStore(context: Context) {
     private val ctx = context.applicationContext
@@ -14,6 +14,12 @@ class LastServerStore(context: Context) {
     companion object {
         private val KEY = stringPreferencesKey("last_server_url")
     } 
+
+    suspend fun clear() {
+        ctx.dataStore.edit { prefs ->
+            prefs.remove(KEY)
+        }
+    }
 
     suspend fun load(): String? {
         val preferences = ctx.dataStore.data.first()

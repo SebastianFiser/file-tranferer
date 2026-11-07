@@ -75,7 +75,8 @@ fun StateContent(
     onCancel: () -> Unit,
     onSendMore: () -> Unit,
     onBack: () -> Unit,
-    onManualConnect: (String) -> Unit
+    onManualConnect: (String) -> Unit,
+    onBackToNotFound: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -140,6 +141,7 @@ fun StateContent(
                 TextButton(onClick = onBack) {
                     Text(stringResource(R.string.action_back))
                 }
+                onBackToNotFound()
 
             }
             is TransferUiState.Connected -> {
