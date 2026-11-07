@@ -113,7 +113,7 @@ fun MainScreen(transferClient: TransferClient) {
                 }
                 AppScreen.History -> HistoryScreen(entries = history, onClear = { vm.clearHistory() })
                 AppScreen.Settings -> SettingsScreen(onForgetServer = { vm.forgetServer() })
-                AppScreen.Help -> PlaceholderScreen(R.string.nav_help)
+                AppScreen.Help -> HelpScreen()
             }
 
             IconButton(

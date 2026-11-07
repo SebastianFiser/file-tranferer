@@ -61,6 +61,13 @@
     <string name="history_empty">No transfers yet</string>
     <string name="history_verified">Verfied</string>
     <string name="history_mismatch">Verification Failed</string>
+    <string name="help_how_title">How to send files</string>
+    <string name="help_step_1"> Open the app on your computer, and make sure both devies are on the same network.</string>
+    <string name="help_step_2">Tap one of the "send via" methods, and wait for connection</string>
+    <string name="help_step_3">Choose files you want to send</string>
+    <string name="help_step_4">Confirm the transfer on zour computer. When it inishes we\'ll check if files arrived intact</string>
+    <string name="help_trouble_title">Computer not found?</string>
+    <string name="help_trouble_body">Check that both devices are on the same network, and that firewall allows the app. You can also enter the computer\'s address manualy</string>
     <plurals name="history_files">
         <item quantity="one">%d file</item>
         <item quantity="other">%d files</item>

@@ -61,6 +61,13 @@
     <string name="history_empty">Zatím žádné přenosy</string>
     <string name="history_verified">Ověřeno</string>
     <string name="history_mismatch">Ověření selhalo</string>
+    <string name="help_how_title">Jak poslat soubory</string>
+    <string name="help_step_1"> Otřevřete aplikaci na počítači, a ujistěte se že zařízení jsou ve stejné síti.</string>
+    <string name="help_step_2">Na hlavní obrazzovce vyberte jednu možnost odfeslání a vyčkejte na spojení</string>
+    <string name="help_step_3">Vyberte soubory k odeslání</string>
+    <string name="help_step_4">Potvrďte přenos na počítači. Až bude dokončen, zkontrolujeme, zda soubory dorazily beze změny.</string>
+    <string name="help_trouble_title">Počáítač nenalezen?</string>
+    <string name="help_trouble_body">Ujistěte se, že obě zařízení jsou ve stejné síti, a že firewall povoluje aplikaci. Můžete také zadat adresu počítače ručně.</string>
     <plurals name="history_files">
         <item quantity="one">%d soubor</item>
         <item quantity="few">%d soubory</item>
