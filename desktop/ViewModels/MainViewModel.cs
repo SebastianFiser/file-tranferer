@@ -100,6 +100,10 @@ public partial class MainViewModel : ObservableObject
                     _lastFolder = s.Folder;
                     if (s.Files != null)
                     {
+                        var from = string.IsNullOrEmpty(s.RemoteAddress)
+                            ? s.Device
+                            : $"{s.Device} ({s.RemoteAddress})";
+                            
                         foreach (var f in Enumerable.Reverse(s.Files))
                             ReceivedFiles.Insert(0, $"{f.Name} ({FormatSize(f.Size)})");
                         while (ReceivedFiles.Count > 50)

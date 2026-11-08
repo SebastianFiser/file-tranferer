@@ -59,7 +59,7 @@ public class TransferServer
                 .ToList();
         }
         StatusChanged?.Invoke(new TransferStatus(
-            phase, s.DeviceName ?? "", bytes, total, done, s.Files.Count, folder, received
+            phase, s.DeviceName ?? "", bytes, total, done, s.Files.Count, folder, received, s.RemoteAddress
         ));
     }
 
@@ -93,7 +93,10 @@ public class TransferServer
             }
             using var ws = await context.WebSockets.AcceptWebSocketAsync();
             var buffer = new byte[8];
-            var state = new ConnectionState();
+            var state = new ConnectionState
+            {
+                RemoteAddress =context.Connection.RemoteIpAddress?.ToString()
+            };
             var options = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
