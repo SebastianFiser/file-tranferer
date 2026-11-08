@@ -1,58 +1,75 @@
-# File-transferer.
-lightweight project conatining two apps, a c# server and kolin android client.
+# file-transferer
 
-"app screenshots"
+![Platform](https://img.shields.io/badge/Platform-Android-green)
+![Platform](https://img.shields.io/badge/Platform-Linux-blue)
+![Kotlin](https://img.shields.io/badge/Kotlin-3.0-blue)
+![C#](https://img.shields.io/badge/C%23-10.0-purple?color=purple)
+![License](https://img.shields.io/badge/License-GNU-red)
 
-# Functions
-Currently working:
--simple UI response
--device search in local networks
--mulotiple file ending at once
--integrity checking trough sha-256 hash
--biggest file sent currentlz 1.1GB
+![Demo](none yet)
 
-Not working:
--easy to use UI, smooth withou issues using
--idk like everzthing
+## How does it work ?
+Your phone finds the PC trough mDNS discovery, connects trough a WebSocket, offers files.Pc confirms them, and requests them by batches. At the end is a SHA-256 checksum
 
-# How to currently run.
-download andrpoid client and server from the latest official release.
-start the desktop app on your linux device
-download and launch .apk on zour android device
-follow instructions on the screen
+## RUN
+### PC (Avalonia)
+    To run the transfer server on the PC side, download the file from official release, and install it. You can then run it as any normal application
+### Android
+    To start the client side, zyou have to download the official .APK file from releases, and install it. **YOU HAVE TO HAVE SIDELOADING ALLOWED**
+    Run it as any other app on your phone.
 
-# How doeas out protocol work
-c is client s is server
-S: offer itself on tcp trough NSD discoverz
-C: finds server and saves its info
+## Protocol
 
-C: creates a websocket conncetion, sending "hello" *view in notes*
-S: after reciewing hello, log device info, if its not connected and no transfer is currentlz running, respond "offer_ack"
+|Type|Path|Data|
+|---|---|---|
+|hello|phone -> PC|device_name|
+|---|---|---|
+|hello_ack|PC -> phone|server_name, protocol_version (1)|
+|---|---|---|
+|offer_files|phone -> PC|files[]: file_id, relative_path, size|
+|---|---|---|
+|offer_ack|PC -> phone|accepted, ransfer_id, max_batch_files (500), max_batch_bytes (64MB)|
+|---|---|---|
+|request_files|PC -> phone|transfer_id, file_ids[]|
+|---|---|---|
+|transfer_complete|PC -> phone|transfer_id, hash[]: file_id, sha256|
+|---|---|---|
+|cancel/cancelled|both ways|transfer_id/empty|
+|---|---|---|
+|error|PC -> phone|code, message|
+|---|---|---|
 
-C: only after offer_ack, can client select files he's going to send
-C: picked files get gathered together and send with "offer_files* *view structure in notes*
-S: check validation of offered files, size.
-S: if seerzthings correct, respond "offer_ack" following with "request_files" witch usualz asks for as much files as it can to fit in one batch.
+### Binary chunk
+    [1 B id length][id UTF-8][8 B offset, big-endian int64][1 B flags][data]
 
-C: processes requested files, picks them FROM THE OFFERED LIST (if its not there it cant be sent)
-C: slices file into bztefraes, start sending
-S: server catches these bzteframes, and catches the path, creates it, and start assembeling the file. if the file isnt yet the size it should be, its currently as a ,part file.
-S: affter recieving the last file, it sends "transfer_complete" witch disconnects the client, closes connection an continues with its existance.
+### Constants 
+    -mDNS dicovery name "_filetransferer._tcp"
+    -default websocket path "ws://[discovered path]:5000*/ws"
+    * -> server defautly brodcasts ip adress and port 5000 from default if 5000 isnt availible on mashine running server, it sellects and brodcasts different address
 
-# Protocols
--> binarz frames [1 B: lenght file_id][N B: filer_id][9 B: offset][1 B:flags][data...]
-these binarz frames are sent trough the websocket connection making zour files
+### Safety and Limits
+    - *Path*
+        i - server caches the path that phone sent, cleans it, and validates that its a real adress
+        ii - Server can request only the cached paths
+        iii - every incoming file is validated aginst the casched files, if it doesnt match its rejected
 
-# Technologies
+    - *Size*
+        i - before transfer phone checks if the entirety of transfer is smaller than 50 GB
+        ii - Server caches these sizes, and request __BATCHES__ of files of less than 64MB
+        iii - Phone sends these byteframes with these byteframes of max size 1 MB
+        iv - before the entire transfer, server itself, has got to be checking the byteframes, batch sizes, and the entire transfer.
+        v - before the transfer, server does a precheck of disk space, and the same while transfering
 
-Server side was developed with dotnet 10 C# and Avalonia framework
-Client side developed with jackpack compose, kotlin
+    - *interruption, offset mismatch*
+        i - if the server or client interrupted by cancell, server deletes the entirety of the transfer.
+        ii - if transfer is interrupted by exception, websocket drop, or sudden error / disconnect, server stashes the last (currently transferrred) .part file.
+        iii - if transferr is dropped by sudden loss of wifi, theres a timeout, witch gives devices space to recover connection and continue sending
 
-# Roadmap
--no auth yet, locked to local network
-- HMAC auth planning
-- sophisticated UI with really intuitive use
-
-# Time layouts
-we have to get 117 hours on this project until 22 dec.
-Currentlz that comes up tp 1.45h a daz, lets see hows it in two dazs after not coding because of work
+## Roadmap
+    //Only latest additions
+    - [x] SHA-256 check, side panel, history, czech lang support
+    - [ ] LZ4 Compression
+    - [ ] Liquid glass look
+    - [ ] Animations, detailed instriuictions
+    - [ ] USB transfer
+         

@@ -36,17 +36,22 @@ import org.dpdns.sebastianfiser.filetransferer.protocol.HelloData
 import org.dpdns.sebastianfiser.filetransferer.protocol.FileInfo
 import org.dpdns.sebastianfiser.filetransferer.protocol.OfferFilesData
 import org.dpdns.sebastianfiser.filetransferer.protocol.OfferAckData
-
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 //why isnt hackatime tracking
 private const val TAG = "TransferClient"
 const val FLAG_LAST = 0x01
+const val FLAG_LZ4 = 0x02
 
+private const val MAX_MISSES = 8
 // Flag_last not integrated on server, once a whole batch arrives, connection closes
 class ServerException(
     val code: String,
     message: String
 ) : Exception(message)
+
+@Volatile private var lz4Enabled = false
 
 class TransferCancelledException : Exception("Transfer cancelled by server")
 
@@ -72,6 +77,7 @@ class TransferClient(
 
 
     suspend fun connect(url: String) {
+        lz4Enabled = false
         ready = CompletableDeferred()
         val request = Request.Builder().url(url).build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -88,7 +94,11 @@ class TransferClient(
                 val envelope = Json.decodeFromString<Envelope>(text)
                 if (envelope.type == "cancel") cancelledByServer = true
                 Log.d("TransferServer", "onMessage ${envelope.type}")
-                if (envelope.type == "hello_ack") ready.complete(Unit)
+                if (envelope.type == "hello_ack") {
+                    val c = (envelope.data as? JsonObject)?.get("compression") as? JsonPrimitive
+                    lz4Enabled = c?.contentOrNull == "lz4"
+                    ready.complete(Unit)
+                }
                 val waiter = pending[envelope.id]
                 if (waiter != null) {
                     waiter.complete(envelope)
@@ -127,7 +137,7 @@ class TransferClient(
         val hello = Envelope(
             id = UUID.randomUUID().toString(),
             type = "hello",
-            data = Json.encodeToJsonElement(HelloData(deviceName, 1))
+            data = Json.encodeToJsonElement(HelloData(deviceName, 1, listOf("lz4")))
         )
         val ws = webSocket ?: error("Not Connected")
         ws.send(Json.encodeToString(hello))
@@ -172,15 +182,15 @@ class TransferClient(
             msg//i would like to watch a movie but i cant find it lowk
         }
 
-    fun buildChunk(fileId: String, offset: Long, flags: Int, data: ByteArray): ByteArray {
+    fun buildChunk(fileId: String, offset: Long, flags: Int, data: ByteArray, len: Int = data.size): ByteArray {
         val idBytes = fileId.toByteArray(Charsets.UTF_8)
-        val buf = ByteBuffer.allocate(1 + idBytes.size + 8 + 1 + data.size)
+        val buf = ByteBuffer.allocate(1 + idBytes.size + 8 + 1 + len)
         buf.order(ByteOrder.BIG_ENDIAN)
         buf.put(idBytes.size.toByte())
         buf.put(idBytes)
         buf.putLong(offset)
         buf.put(flags.toByte())
-        buf.put(data)
+        buf.put(data, 0, len)
         return buf.array()
     }
 
@@ -284,6 +294,9 @@ class TransferClient(
     ): String {
         val ws = webSocket ?: error("Not connected")
         val digest = MessageDigest.getInstance("SHA-256")
+        val encoder = if (lz4Enabled) Lz4ChunkEncoder() else null
+        var misses = 0
+
 
         if (picked.size == 0L) {
             ws.send(buildChunk(fileId, 0L, FLAG_LAST, ByteArray(0)).toByteString())
@@ -301,13 +314,23 @@ class TransferClient(
                 val n = it.read(buffer)
                 if (n <= 0) break
                 digest.update(buffer, 0, n)
+                
                 val isLast = offset + n == picked.size
-                val flags = if (isLast) FLAG_LAST else 0
+
+                val c = if (encoder != null && misses < MAX_MISSES) encoder.encode(buffer, n) else null
+                if (c != null) misses = if (c.flags.toInt() == 0) misses + 1 else 0
+
+                val flags = (if (isLast) FLAG_LAST else 0) or (c?.flags?.toInt() ?: 0)
+                val payload = c?.buffer ?: buffer
+
+                val payloadLen = c?.length ?: n
+
                 while (ws.queueSize() > 4L * 1024 * 1024) delay(10)
-                val ret = ws.send(buildChunk(fileId, offset, flags, buffer.copyOf(n)).toByteString())
+                val ret = ws.send(buildChunk(fileId, offset, flags, payload, payloadLen).toByteString())
                 Log.d("TransferClient", "send returned $ret")
                 offset += n
                 onBytes(n)
+
             } 
         }
         return digest.digest().toHex()

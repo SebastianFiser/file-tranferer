@@ -13,5 +13,6 @@ class ConnectionState
     public bool CancelRequested { get; set; }
     public long LastReportTick { get; set; }
     public string? RemoteAddress { get; set; }
+    public bool LZ4 { get; set; }
     public Dictionary<string, FileTransferState> Files { get; set; } = new();
 }

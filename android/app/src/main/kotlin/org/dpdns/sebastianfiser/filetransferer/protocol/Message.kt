@@ -16,7 +16,8 @@ data class Envelope(
 @Serializable
 data class HelloData(
     @SerialName("device_name") val devieName: String,
-    @SerialName("protocol_version") val protocolVersion: Int
+    @SerialName("protocol_version") val protocolVersion: Int,
+    val compression: List<String> = emptyList()
 )
 
 //offer files stuff

@@ -17,6 +17,7 @@ using System.Net.Sockets;
 using System.Linq;
 using desktop.Models;
 using System.Runtime.CompilerServices;
+using K4os.Compression.LZ4;
 
 namespace desktop.Server;
 
@@ -39,6 +40,28 @@ public class TransferServer
 
     private sealed record ActiveTransfer(WebSocket Ws, ConnectionState State, JsonSerializerOptions Options);
     private static ActiveTransfer? _active;
+
+    private const byte FlagLast = 0x01;
+    private const byte FlagLz4 = 0x02;
+    private const byte MaxChunkBytes = 8 * 1024 * 1024;
+
+    private static bool TryDecodeLz4(ReadonlySpan<byte> payload, out byte[] raw)
+    {
+        raw = Array.Empty<byte>();
+        if (payload.Length < 4) return false;
+
+        var rawLen = BinaryPrimitives.ReadInt32BigEndian(payload);
+        if (rawLen <= 0 || rawLen > MaxChunkBytes) return false;
+
+        var buffer = new byte[rawLen];
+        int n;
+        try { n = LZ4Codec.Decode(payload.Slice(4), buffer); }
+        catch (Exception) { return false; }
+
+        if (n != rawLen) return false;
+        raw = buffer;
+        return true;
+    }
 
     private static void Report(ConnectionState s, TransferPhase phase)
     {
@@ -151,6 +174,21 @@ public class TransferServer
                         }
 
                         var data = frame.AsMemory(dataStart);
+
+                        if ((flags & ~(FlagLast | FlagLz4)) != 0)
+                        {
+                            await SendAsync(ws, MakeError("0", "unsupported_flags", "unknown chunk flags"), options);
+                            break;
+                        }
+                        if ((flags & FlagLz4) != 0)
+                        {
+                            if (!state.Lz4 || !TryDecodeLz4(data.Span, out var raw))
+                            {
+                                await SendSync(ws, MakeError("0", "invalid_binary", "invalid or unnegotiated compressed chunk"), options);
+                                break;
+                            }
+                            data = raw;
+                        }
 
 
                         if (!state.Files.TryGetValue(fileId, out var file))
@@ -455,12 +493,22 @@ public class TransferServer
             await SendAsync(ws, MakeError(msg.Id, "invalid_device_name", "device_name contains invalid characters"), options);
             return false;
         }
+
+        state.Lz4 = msg.Data.TryGetProperty("compression", out var comp)
+            && comp.ValueKind == JsonValueKind.String
+            && comp.EnumerateArray().Any(e -> e.ValueKind == JsonValueKind.String && e.GetString() == "lz4");
+
         state.DeviceName = deviceName;
         state.DevicePath = Path.Combine(_appPath, deviceName);
 
         Console.WriteLine($"device_name: {state.DeviceName}");
         Console.WriteLine($"device_path: {state.DevicePath}");
-        var data = JsonSerializer.SerializeToElement(new { server_name = "PC", protocol_version = 1 });
+        var data = JsonSerializer.SerializeToElement(new
+        { 
+            server_name = "PC",
+            protocol_version = 1,
+            compression = state.Lz4 ? "lz4" : "none"
+        });
         var reply = new Message(msg.Id, "hello_ack", data);
         await SendAsync(ws, reply, options);
         return true;
