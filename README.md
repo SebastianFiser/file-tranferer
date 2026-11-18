@@ -21,6 +21,7 @@ Your phone finds the PC trough mDNS discovery, connects trough a WebSocket, offe
 ## Protocol
 
 |Type|Path|Data|
+|---|---|---|
 |hello|phone -> PC|device_name|
 |hello_ack|PC -> phone|server_name, protocol_version (1)|
 |offer_files|phone -> PC|files[]: file_id, relative_path, size|
