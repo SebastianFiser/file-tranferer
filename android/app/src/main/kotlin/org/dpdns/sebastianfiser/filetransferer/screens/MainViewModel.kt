@@ -16,11 +16,24 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.provider.OpenableColumns
 import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 
 import org.dpdns.sebastianfiser.filetransferer.R
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.network.ServerDiscovery
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
+import org.dpdns.sebastianfiser.filetransferer.network.ServerException
+import org.dpdns.sebastianfiser.filetransferer.network.TransferCancelledException
+import org.dpdns.sebastianfiser.filetransferer.network.LastServerStore
+import org.dpdns.sebastianfiser.filetransferer.protocol.formatBytes
+import org.dpdns.sebastianfiser.filetransferer.network.VerifyResult
+import org.dpdns.sebastianfiser.filetransferer.network.HistoryStore
+import org.dpdns.sebastianfiser.filetransferer.network.HistoryEntry
+import org.dpdns.sebastianfiser.filetransferer.screens.AppScreen
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     //holds app states and variables that have to survive recompose of screens
@@ -30,6 +43,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var client: TransferClient? = null
     private var transferJob: Job? = null
+    private val lastServerStore = LastServerStore(application)
+
+    private val _method = MutableStateFlow(SendMethod.Wifi)
+    val method: StateFlow<SendMethod> = _method.asStateFlow()
+    private var serverLabel = ""
+    private var pendingUris: List<Uri> = emptyList()
+    private val _screen = MutableStateFlow(AppScreen.Home)
+    val screen: StateFlow<AppScreen> = _screen.asStateFlow()
+
+    private val historyStore = HistoryStore(application)
+
+    val history: StateFlow<List<HistoryEntry>> = historyStore.entries
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun openScreen(s: AppScreen) {
+        _screen.value = s 
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            historyStore.clear()
+        }
+    }
 
     private val deviceName = "${Build.MODEL}[${
         Settings.Secure.getString(
@@ -37,46 +73,133 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }]"
 
+    fun backToNotFound() {
+        _uiState.value = TransferUiState.NotFound
+    }
+
+    fun forgetServer() {
+        viewModelScope.launch { lastServerStore.clear()}
+    }
+
+
     fun cancelTransfer() {
         transferJob?.cancel()
         transferJob = null
-        _uiState.value = TransferUiState.Connected(deviceName)
+        _uiState.value = TransferUiState.Cancelled
     }
 
     fun backToConnected() {
-        _uiState.value = TransferUiState.Connected(deviceName)
+        _uiState.value = TransferUiState.Connected(serverLabel)
     }
 
-    fun connect() {
-        if (_uiState.value is TransferUiState.Connecting ||
+    private suspend fun tryConnect(url: String): TransferClient? {
+        val c = TransferClient(deviceName)
+        val ok: Boolean? = try {
+            withTimeoutOrNull(3000) {
+                c.connect(url)
+                true
+            }
+        } catch (e: CancellationException) {
+            c.close()
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        if (ok == true) return c
+        c.close()
+        return null
+    } 
+
+
+
+    fun connect(method: SendMethod = _method.value) {
+        if (_uiState.value is TransferUiState.Searching ||
+            _uiState.value is TransferUiState.Connecting ||
             _uiState.value is TransferUiState.Connected
         ) {
             return
         }
-        _uiState.value = TransferUiState.Connecting
+        _method.value = method
+        _uiState.value = TransferUiState.Searching
 
         viewModelScope.launch {
-            var newClient: TransferClient? = null
             try {
-                val server = ServerDiscovery(getApplication<Application>()).find()
-                    ?: throw IllegalStateException("Server not found")
-                val Url = if (server != null) "ws://${formatUrl(server.host)}:${server.port}/ws" else throw IllegalStateException("Server not found")
-                val c = TransferClient(deviceName)
-                client = c
-                c.connect(Url)
-                client = c
-                _uiState.value = TransferUiState.Connected(server?.host ?: "unknown")
+
+                var url: String? = null
+                var connected: TransferClient? = null
+
+                val saved = lastServerStore.load()
+                if (saved != null) {
+                    connected = tryConnect(saved)
+                    if (connected != null) url = saved
+                }
+
+                if (connected == null) {
+                    val server = ServerDiscovery(getApplication<Application>()).find()
+                    if (server != null) {
+                        val found = "ws://${formatUrl(server.host)}:${server.port}/ws"
+                        connected = tryConnect(found)
+                        if (connected != null) url = found
+                    }
+                }
+
+                if (connected == null || url == null) {
+                    pendingUris = emptyList()
+                    _uiState.value = TransferUiState.NotFound
+                    return@launch
+                }
+
+                finishConnect(connected, url)
+                _uiState.value = TransferUiState.Connected(serverLabel)
+                lastServerStore.save(url)
             } catch (e: CancellationException) {
-                newClient?.close()
                 throw e
             } catch (e: Exception) {
-                newClient?.close()
+                pendingUris = emptyList()
                 client = null
-                _uiState.value = TransferUiState.Error(ErrorKind.ServerUnreachable)
+                _uiState.value = TransferUiState.Error(ErrorKind.Unknown)
             }
         }
 
     }
+
+    private suspend fun finishConnect(c: TransferClient, url: String) {
+        closeClient()
+        client = c
+        serverLabel = Uri.parse(url).host ?: url
+        _uiState.value = TransferUiState.Connected(serverLabel)
+
+        val pending = pendingUris
+        pendingUris = emptyList()
+        if (pending.isNotEmpty()) {
+            sendFile(pending)
+        }
+    }
+
+    fun connectManual(url: String) {
+        val s = _uiState.value
+        if (s is TransferUiState.Searching ||
+            s is TransferUiState.Connecting ||
+            s is TransferUiState.Connected
+        ) return
+        _uiState.value = TransferUiState.Searching
+
+        viewModelScope.launch {
+            try {
+                val c = tryConnect(url)
+                if (c == null) {
+                    _uiState.value = TransferUiState.NotFound
+                    return@launch
+                }
+                finishConnect(c, url)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e : Exception) {
+                _uiState.value = TransferUiState.Error(ErrorKind.Unknown)
+            }
+        }
+
+    } 
 
     fun disconnect() {
         transferJob?.cancel()
@@ -94,9 +217,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         closeClient()
     }
 
+    fun onSharedFiles(uris: List<Uri>) {
+        val s = _uiState.value
+        if (s is TransferUiState.Connected || s is TransferUiState.Done) {
+            sendFile(uris)
+        } else {
+            pendingUris = uris
+            connect(SendMethod.Wifi)
+        }
+    }
+
     fun sendFile(uris: List<Uri>) {
         val c = client ?: return
-        if (_uiState.value is TransferUiState.Transferring) return
+        if (_uiState.value is TransferUiState.Transferring || _uiState.value is TransferUiState.WaitingForConfirmation) return
 
         transferJob = viewModelScope.launch {
             try {
@@ -114,19 +247,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val total = files.sumOf { it.size }
                 val ends = files.runningFold(0L) { acc, f -> acc + f.size }.drop(1)
 
-                _uiState.value = TransferUiState.Transferring(0, total, 0, files.size)
                 var lastUpdate = 0L
-                c.sendPickedFiles(resolver, files) { sent ->
-                    val now = System.currentTimeMillis()
-                    if (now - lastUpdate > 100) {
-                        lastUpdate = now
-                        val idx = ends.indexOfFirst { sent < it }
-                            .let { if (it < 0) files.lastIndex else it }
-                        _uiState.value = TransferUiState.Transferring(sent, total, idx, files.size)
-                    }
-                }
+                var lastBytes = 0L
+                var speed = 0.0 //B.s smoothsajbcsal
+                var startedAt = 0L
+                val verify = c.sendPickedFiles(
+                    resolver, files,
+                    onWaiting = { _uiState.value = TransferUiState.WaitingForConfirmation},
+                    onAccepted = { 
+                        if (isActive){
+                            val now = System.currentTimeMillis()
+                            startedAt = now
+                            lastUpdate = now
+                            lastBytes = 0L
+                            speed = 0.0
+                            _uiState.value = TransferUiState.Transferring(0, total, 0, files.size)
+                        } 
+                    },
+                    onProgress =  { sent ->
+                        val now = System.currentTimeMillis()
+                        if (isActive  && now - lastUpdate > 100) {
+                            val dt = (now -lastUpdate) / 1000.0
+                            val instant = (sent - lastBytes) / dt
+                            speed = if (speed == 0.0) instant else 0.1 * instant + 0.9 * speed
+                            lastUpdate = now
+                            lastBytes = sent
 
-                _uiState.value = TransferUiState.Done(files.size)
+                            val eta = if (now - startedAt > 2000 && speed > 0)
+                                ((total - sent) / speed).toLong() else -1L
+                            val idx = ends.indexOfFirst { sent < it }
+                                .let { if (it < 0) files.lastIndex else it }
+                            _uiState.value = TransferUiState.Transferring(
+                                sent, total, idx, files.size, speed.toLong(), eta
+                            )
+                        }
+                    }
+                )
+
+                _uiState.value = TransferUiState.Done(files.size, total, verify)
+                historyStore.add(
+                    HistoryEntry(
+                        System.currentTimeMillis(), files.size, total, verify == VerifyResult.Verified, serverLabel
+                    )
+                )
+            } catch (e: ServerException){
+                _uiState.value = when (e.code) {
+                    "offer_rejected" -> TransferUiState.Rejected
+                    "offer_timeout" -> TransferUiState.Timeout
+                    else -> TransferUiState.Error(ErrorKind.Unknown)
+                }
+            } catch (e: TransferCancelledException) {
+                _uiState.value = TransferUiState.Cancelled
+            } catch (e: TimeoutCancellationException) {
+                _uiState.value = if (_uiState.value is TransferUiState.WaitingForConfirmation) {
+                    TransferUiState.Timeout
+                } else {
+                    TransferUiState.Error(ErrorKind.ConnectionLost)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

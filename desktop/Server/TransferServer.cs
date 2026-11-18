@@ -16,12 +16,15 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Linq;
 using desktop.Models;
+using System.Runtime.CompilerServices;
+using K4os.Compression.LZ4;
 
 namespace desktop.Server;
 
 public class TransferServer
 {
     private WebApplication? _app;
+    public static Func<OfferInfo, CancellationToken, Task<bool>>? ConfirmOfferAsync { get; set; }
     private int _port;
     private const int _maxFileCount = 10000;
     private const long _maxTotalSize = 20L * 1024 * 1024 * 1024;
@@ -33,6 +36,65 @@ public class TransferServer
     private const long MaxBatchBytes = 64L * 1024 * 1024;
 
     private ServiceDiscovery? _sd;
+    public static event Action<TransferStatus>? StatusChanged;
+
+    private sealed record ActiveTransfer(WebSocket Ws, ConnectionState State, JsonSerializerOptions Options);
+    private static ActiveTransfer? _active;
+
+    private const byte FlagLast = 0x01;
+    private const byte FlagLz4 = 0x02;
+    private const byte MaxChunkBytes = 8 * 1024 * 1024;
+
+    private static bool TryDecodeLz4(ReadonlySpan<byte> payload, out byte[] raw)
+    {
+        raw = Array.Empty<byte>();
+        if (payload.Length < 4) return false;
+
+        var rawLen = BinaryPrimitives.ReadInt32BigEndian(payload);
+        if (rawLen <= 0 || rawLen > MaxChunkBytes) return false;
+
+        var buffer = new byte[rawLen];
+        int n;
+        try { n = LZ4Codec.Decode(payload.Slice(4), buffer); }
+        catch (Exception) { return false; }
+
+        if (n != rawLen) return false;
+        raw = buffer;
+        return true;
+    }
+
+    private static void Report(ConnectionState s, TransferPhase phase)
+    {
+        long bytes = 0, total = 0; var done = 0;
+        foreach (var f in s.Files.Values)
+        {
+            total += f.Size;
+            bytes += f.BytesRecived;
+            if (f.BytesRecived >= f.Size) done++;
+        }
+        string? folder = null;
+        List<ReceivedFile>? received = null;
+        if (phase == TransferPhase.Done)
+        {
+            folder = Path.GetFullPath(Path.Combine(_appPath, s.DevicePath));
+            received = s.Files.Values
+                .Select(f => new ReceivedFile(Path.GetFileName(f.TargetPath), f.Size, f.TargetPath))
+                .ToList();
+        }
+        StatusChanged?.Invoke(new TransferStatus(
+            phase, s.DeviceName ?? "", bytes, total, done, s.Files.Count, folder, received, s.RemoteAddress
+        ));
+    }
+
+    public static async Task CancelActiveTransferAsync()
+    {
+        var a = _active;
+        if (a == null) return;
+        a.State.CancelRequested = true;
+        var data = JsonSerializer.SerializeToElement(new { transfer_id = a.State.TransferId});
+        try { await SendAsync(a.Ws, new Message("s_" + Guid.NewGuid().ToString("N"), "cancel", data), a.Options); }
+        catch { }
+    }
 
     private async Task StartOnPortAsync(int port)
     {
@@ -54,7 +116,10 @@ public class TransferServer
             }
             using var ws = await context.WebSockets.AcceptWebSocketAsync();
             var buffer = new byte[8];
-            var state = new ConnectionState();
+            var state = new ConnectionState
+            {
+                RemoteAddress =context.Connection.RemoteIpAddress?.ToString()
+            };
             var options = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
@@ -89,8 +154,12 @@ public class TransferServer
                     {
                         if (state.TransferId == null)
                         {
-                            await SendAsync(ws, MakeError("0", "invalid_process", "binary isnt accepted if no transfer is in progress"), options);
-                            break;
+                            continue;
+                        }
+                        if (state.CancelRequested)
+                        {
+                            await CleanupTransferAsync(state);
+                            continue;
                         }
 
                         byte[] frame = ms.ToArray();
@@ -105,6 +174,21 @@ public class TransferServer
                         }
 
                         var data = frame.AsMemory(dataStart);
+
+                        if ((flags & ~(FlagLast | FlagLz4)) != 0)
+                        {
+                            await SendAsync(ws, MakeError("0", "unsupported_flags", "unknown chunk flags"), options);
+                            break;
+                        }
+                        if ((flags & FlagLz4) != 0)
+                        {
+                            if (!state.Lz4 || !TryDecodeLz4(data.Span, out var raw))
+                            {
+                                await SendSync(ws, MakeError("0", "invalid_binary", "invalid or unnegotiated compressed chunk"), options);
+                                break;
+                            }
+                            data = raw;
+                        }
 
 
                         if (!state.Files.TryGetValue(fileId, out var file))
@@ -137,6 +221,13 @@ public class TransferServer
                         await file.Stream.WriteAsync(data);
                         file.Hasher!.AppendData(data.Span);
                         file.BytesRecived += data.Length;
+
+                        var tick = Environment.TickCount64;
+                        if (tick - state.LastReportTick > 100)
+                        {
+                            state.LastReportTick = tick;
+                            Report(state, TransferPhase.Progress);
+                        }
 
                         if (file.BytesRecived >= file.Size)
                         {
@@ -187,7 +278,14 @@ public class TransferServer
                             state.HandshakeDone = await HandleHelloAsync(ws, msg, options, state);
                             break;
                         case "offer_files":
-                            await HandleOfferFilesAsync(ws, msg, options, state);
+                            _ = HandleOfferFilesAsync(ws, msg, options, state).ContinueWith(
+                                t => Console.WriteLine($"offer handler failed: {t.Exception?.GetBaseException().Message}"),
+                                TaskContinuationOptions.OnlyOnFaulted);
+                            break;
+                        case "cancel":
+                            CancelOffer(state);
+                            await CleanupTransferAsync(state);
+                            await SendAsync(ws, new Message(msg.Id, "cancelled", JsonSerializer.SerializeToElement(new {})), options);
                             break;
                         default:
                             await SendAsync(ws, MakeError(msg.Id, "unknow type", "send a valid type"), options);
@@ -208,14 +306,8 @@ public class TransferServer
             finally
             {
                 Console.WriteLine("Connection closed, cleaning up");
-                foreach (var f in state.Files.Values)
-                {
-                    if (f.Stream != null)
-                    {
-                        await f.Stream.DisposeAsync();
-                        f.Stream = null;
-                    }
-                }
+                CancelOffer(state);
+                await CleanupTransferAsync(state);
             }
         });
 
@@ -373,7 +465,7 @@ public class TransferServer
             transfer_id = transferId,
             hash = hashes
         });
-
+        
         Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} sending transfer_complete");
 
         return new Message("0", "transfer_complete", data);
@@ -401,12 +493,22 @@ public class TransferServer
             await SendAsync(ws, MakeError(msg.Id, "invalid_device_name", "device_name contains invalid characters"), options);
             return false;
         }
+
+        state.Lz4 = msg.Data.TryGetProperty("compression", out var comp)
+            && comp.ValueKind == JsonValueKind.String
+            && comp.EnumerateArray().Any(e -> e.ValueKind == JsonValueKind.String && e.GetString() == "lz4");
+
         state.DeviceName = deviceName;
         state.DevicePath = Path.Combine(_appPath, deviceName);
 
         Console.WriteLine($"device_name: {state.DeviceName}");
         Console.WriteLine($"device_path: {state.DevicePath}");
-        var data = JsonSerializer.SerializeToElement(new { server_name = "PC", protocol_version = 1 });
+        var data = JsonSerializer.SerializeToElement(new
+        { 
+            server_name = "PC",
+            protocol_version = 1,
+            compression = state.Lz4 ? "lz4" : "none"
+        });
         var reply = new Message(msg.Id, "hello_ack", data);
         await SendAsync(ws, reply, options);
         return true;
@@ -422,7 +524,7 @@ public class TransferServer
             await SendAsync(ws, MakeError(msg.Id, "handshake_required", "send hello first"), options);
             return;
         }
-        if (state.TransferId != null)
+        if (state.TransferId != null || state.AwaitingDecision)
         {
             await SendAsync(ws, MakeError(msg.Id, "transfer_in_progress", "a transfer is already in progress"), options);
             return;
@@ -443,6 +545,44 @@ public class TransferServer
         {
             await SendAsync(ws, MakeError(msg.Id, "insufficient_space", "theres not enough space to transfer files"), options);
             return;
+        }
+        if (ConfirmOfferAsync != null) {
+            var info = new OfferInfo(
+                state.DeviceName ?? "unknown device",
+                msg.Data.GetProperty("files").GetArrayLength(),
+                fileSize
+            );
+            
+            var offerCts = new CancellationTokenSource();
+            state.OfferCts = offerCts;
+            state.AwaitingDecision = true;
+            bool accepted;
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(offerCts.Token);
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                timeoutCts.CancelAfter(TimeSpan.FromSeconds(60));
+                accepted = await ConfirmOfferAsync(info, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                if (!offerCts.IsCancellationRequested)
+                    await SendAsync(ws, MakeError(msg.Id, "offer_timeout", "nobody confirmed the transfer in time"), options);
+                return;
+            }
+            finally
+            {
+                state.AwaitingDecision = false;
+                state.OfferCts = null;
+                offerCts.Dispose();
+            }
+
+            if (!accepted)
+            {
+                await SendAsync(ws, MakeError(msg.Id, "offer_rejected", "the transfer was declined"), options);
+                return;
+            }
+
         }
         var baseDir = Path.GetFullPath(Path.Combine(_appPath, state.DevicePath));
 
@@ -493,6 +633,8 @@ public class TransferServer
         Directory.CreateDirectory(baseDir);
         state.Files = files;
         state.TransferId = "t_" + Guid.NewGuid().ToString("N");
+        _active = new ActiveTransfer(ws, state, options);
+        Report(state, TransferPhase.Started);
 
         await sendOfferAckAsync(ws, msg.Id, options, state);
         await CompleteIfDoneAsync(ws, options, state);
@@ -505,8 +647,10 @@ public class TransferServer
         {
             var transferId = state.TransferId!;
             Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff}, last cunk of {transferId} received");
+            Report(state, TransferPhase.Done);
             await SendAsync(ws, MakeTransferComplete(transferId, state), options);
             state.TransferId = null;
+            _active = null;
             state.Files = new Dictionary<string, FileTransferState>();
         }
         else if (state.Files.Values.Where(f => f.Requested).All(f => f.BytesRecived >= f.Size))
@@ -668,11 +812,45 @@ public class TransferServer
         return new Message(id, "error", data);
     }
 
+    private static readonly ConditionalWeakTable<WebSocket, SemaphoreSlim> SendLocks = new();
+
     static async Task SendAsync(WebSocket ws, Message msg, JsonSerializerOptions options)
     {
         var json = JsonSerializer.Serialize(msg, options);
         var bytes = Encoding.UTF8.GetBytes(json);
-        await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+
+        var gate = SendLocks.GetValue(ws, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync();
+        try 
+        {
+            await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+        }
+        finally { gate.Release(); }
+    }
+
+    private static async Task CleanupTransferAsync(ConnectionState state)
+    {
+        if (state.TransferId != null) Report(state, TransferPhase.Cancelled);
+        if (_active?.State == state) _active = null;
+        state.CancelRequested = false;
+        foreach (var f in state.Files.Values)
+        {
+            if (f.Stream != null) { await f.Stream.DisposeAsync(); f.Stream = null;}
+            f.Hasher?.Dispose();
+            f.Hasher = null;
+
+            if (f.BytesRecived >= f.Size) continue;
+
+            try { File.Delete(f.TargetPath + ".part"); } catch { }
+            try { File.Delete(f.TargetPath); } catch { }
+        }
+        state.Files = new Dictionary<string, FileTransferState>();
+        state.TransferId = null;
+    }
+
+    private static void CancelOffer(ConnectionState state)
+    {
+        try { state.OfferCts?.Cancel(); } catch (ObjectDisposedException) { }
     }
 
 }

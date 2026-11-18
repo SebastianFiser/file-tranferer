@@ -21,6 +21,17 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.res.stringResource
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.rememberDrawerState
 
 import org.dpdns.sebastianfiser.filetransferer.network.TransferClient
 import org.dpdns.sebastianfiser.filetransferer.files.PickedFile
@@ -36,6 +47,7 @@ fun MainScreen(transferClient: TransferClient) {
 
     val vm: MainViewModel = viewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val method by vm.method.collectAsStateWithLifecycle()
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -43,29 +55,74 @@ fun MainScreen(transferClient: TransferClient) {
         if (uris.isNotEmpty()) vm.sendFile(uris)
     }
 
-    LaunchedEffect(Unit) {
-        if (vm.uiState.value is TransferUiState.Idle) {
-            vm.connect()
-        }
+    val screen by vm.screen.collectAsStateWithLifecycle()
+    val history by vm.history.collectAsStateWithLifecycle()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+
+    BackHandler(enabled = screen != AppScreen.Home && !drawerState.isOpen) {
+        vm.openScreen(AppScreen.Home)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        StateContent(
-            s = state,
-            onPick = { picker.launch(arrayOf("*/*")) },
-            onRetry = { vm.connect() },
-            onCancel = { vm.cancelTransfer() },
-            onSendMore = { vm.backToConnected() }
-        )
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                Spacer(Modifier.height(12.dp))
+                AppScreen.entries.forEach { item ->
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(item.labelRes)) },
+                        selected = item == screen,
+                        onClick = {
+                            vm.openScreen(item)
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                    )
+                }
+            }
+        }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            when (screen) {
+                AppScreen.Home -> {
+                    if (state is TransferUiState.Idle) {
+                        MethodChooser(onChoose = { vm.connect() })
+                    } else {
+                        StateContent(
+                            s = state,
+                            method = method,
+                            onPick = { picker.launch(arrayOf("*/*")) },
+                            onRetry = { vm.connect() },
+                            onCancel = { vm.cancelTransfer() },
+                            onSendMore = { vm.backToConnected() },
+                            onBack = { vm.disconnect() },
+                            onManualConnect = { vm.connectManual(it) },
+                            onBackToNotFound = { vm.backToNotFound() }
+                        )
+                    }
+                    if (state is TransferUiState.Connected || state is TransferUiState.Done) {
+                        TextButton(
+                            onClick = { vm.disconnect() },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(24.dp)
+                        ) {
+                            Text(stringResource(R.string.action_disconnect))
+                        }
+                    }
+                }
+                AppScreen.History -> HistoryScreen(entries = history, onClear = { vm.clearHistory() })
+                AppScreen.Settings -> SettingsScreen(onForgetServer = { vm.forgetServer() })
+                AppScreen.Help -> HelpScreen()
+            }
 
-        if (state is TransferUiState.Connected || state is TransferUiState.Done) {
-            TextButton(
-                onClick = { vm.disconnect() },
+            IconButton(
+                onClick = { scope.launch { drawerState.open() } },
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(24.dp)
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
             ) {
-                Text(stringResource(R.string.action_disconnect))
+                Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
             }
         }
     }

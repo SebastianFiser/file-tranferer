@@ -16,7 +16,8 @@ data class Envelope(
 @Serializable
 data class HelloData(
     @SerialName("device_name") val devieName: String,
-    @SerialName("protocol_version") val protocolVersion: Int
+    @SerialName("protocol_version") val protocolVersion: Int,
+    val compression: List<String> = emptyList()
 )
 
 //offer files stuff
@@ -47,6 +48,18 @@ data class OfferAckData(
 data class RequestFilesData(
     @SerialName("transfer_id") val transferId: String,
     @SerialName("file_ids") val fileIds: List<String>
+)
+
+@Serializable
+data class CompleteData(
+    @SerialName("transfer_id") val transferId: String,
+    @SerialName("hash") val hash: List<HashData>
+)
+
+@Serializable
+data class HashData(
+    @SerialName("file_id") val fileId: String,
+    @SerialName("sha256") val sha256: String
 )
 
 @Serializable

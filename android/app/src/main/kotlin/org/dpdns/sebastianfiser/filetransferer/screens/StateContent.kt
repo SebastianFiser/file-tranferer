@@ -9,12 +9,28 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+
+import org.dpdns.sebastianfiser.filetransferer.network.parseServerAddress
 import org.dpdns.sebastianfiser.filetransferer.R
+import org.dpdns.sebastianfiser.filetransferer.protocol.formatBytes
+import org.dpdns.sebastianfiser.filetransferer.protocol.formatEta
+import org.dpdns.sebastianfiser.filetransferer.network.VerifyResult
+import org.dpdns.sebastianfiser.filetransferer.ui.theme.VerifiedGreen
+import org.dpdns.sebastianfiser.filetransferer.ui.theme.WarningAmber
+
 
 @Composable
 private fun BigButton(
     text: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     Button(
         onClick = onClick,
@@ -28,12 +44,39 @@ private fun BigButton(
 }
 
 @Composable
+private fun ManualAddress(onConnect: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val url = parseServerAddress(text)
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { text = it },
+        label = { Text(stringResource(R.string.manual_address_label)) },
+        supportingText = { Text(stringResource(R.string.manual_address_hint)) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    )
+    BigButton(
+        text = stringResource(R.string.action_connect),
+        onClick = { if (url != null) onConnect(url) },
+        enabled = url != null
+    )
+}
+
+@Composable
 fun StateContent(
     s:TransferUiState,
+    method: SendMethod,
     onPick: () -> Unit,
     onRetry: () -> Unit,
     onCancel: () -> Unit,
-    onSendMore: () -> Unit
+    onSendMore: () -> Unit,
+    onBack: () -> Unit,
+    onManualConnect: (String) -> Unit,
+    onBackToNotFound: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -43,41 +86,121 @@ fun StateContent(
         verticalArrangement = Arrangement.Center
     ) {
         val title = when (s) {
+            is TransferUiState.Done -> 
+                if (s.verify == VerifyResult.Verified) stringResource(R.string.state_done_title)
+                else stringResource(R.string.state_mismatch_title)
             is TransferUiState.Idle -> stringResource(R.string.state_idle_title)
             is TransferUiState.Searching -> stringResource(R.string.state_searching_title)
             is TransferUiState.NotFound -> stringResource(R.string.state_notfound_title)
             is TransferUiState.Connecting -> stringResource(R.string.state_connecting_title)
             is TransferUiState.Connected -> stringResource(R.string.state_connected_title, s.deviceName)
             is TransferUiState.Transferring -> stringResource(R.string.state_transferring_title, s.fileIndex + 1, s.fileCount)
-            is TransferUiState.Done -> stringResource(R.string.state_done_title)
             is TransferUiState.Error -> stringResource(s.message.messageRes())
+            is TransferUiState.WaitingForConfirmation -> stringResource(R.string.state_waiting_for_confirmation_title)
+            is TransferUiState.Rejected -> stringResource(R.string.state_rejected_title)
+            is TransferUiState.Timeout -> stringResource(R.string.state_timeout_title)
+            is TransferUiState.Cancelled -> stringResource(R.string.state_cancelled_title)
         }
         Text(title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
 
         when (s) {
             is TransferUiState.Searching -> {
+                Spacer(modifier = Modifier.height(24.dp))
                 CircularProgressIndicator()
-                Text(stringResource(R.string.state_searching_hint), textAlign = TextAlign.Center)
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    stringResource(
+                        if (method == SendMethod.Cable) R.string.state_searching_hint_cable
+                        else R.string.state_searching_hint_wifi
+                    ),
+                    textAlign = TextAlign.Center
+                )
             }
             is TransferUiState.NotFound -> {
-                Text(stringResource(R.string.state_notfound_hint), textAlign = TextAlign.Center)
-                BigButton(stringResource(R.string.action_retry), onRetry)
+                var manual by remember { mutableStateOf(false) }
+
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.state_notfound_tip_server), textAlign = TextAlign.Center)
+                Text(
+                    stringResource(
+                        if (method == SendMethod.Cable) R.string.state_notfound_tip_cable
+                        else R.string.state_notfound_tip_wifi
+                    ),
+                    textAlign = TextAlign.Center
+                )
+                Text(stringResource(R.string.state_notfound_tip_firewall), textAlign = TextAlign.Center)
+
+                if (manual) {
+                    ManualAddress(onManualConnect)
+                } else {
+                    BigButton(stringResource(R.string.action_retry), onRetry)
+                    TextButton(onClick = { manual = true }) {
+                        Text(stringResource(R.string.action_enter_address))
+                    }
+                }
+                TextButton(onClick = onBack) {
+                    Text(stringResource(R.string.action_back))
+                }
+                onBackToNotFound()
+
             }
-            is TransferUiState.Connected -> BigButton(stringResource(R.string.action_pick_file), onPick)
+            is TransferUiState.Connected -> {
+                BigButton(stringResource(R.string.action_pick_file), onPick)
+                Text(
+                    stringResource(R.string.state_connected_hint),
+                    textAlign = TextAlign.Center
+                )
+            }
             is TransferUiState.Transferring -> {
+                if (s.currentName.isNotEmpty()) {
+                    Text(s.currentName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 val fraction = if (s.totalBytes > 0 ) s.bytesSent.toFloat() / s.totalBytes else 0f
-                LinearProgressIndicator(progress = fraction, modifier = Modifier.fillMaxWidth())
+                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
                 Text("${(fraction * 100).toInt()} %")
+                Text("${formatBytes(s.bytesSent)} / ${formatBytes(s.totalBytes)}")
+                if (s.speedBps > 0) {
+                    val eta = if (s.etaSeconds >= 0)
+                        " . " + stringResource(R.string.transfer_eta, formatEta(s.etaSeconds)) else ""
+                    Text(stringResource(R.string.transfer_speed, formatBytes(s.speedBps)) + eta)
+                }
                 TextButton(onClick = onCancel) {
                     Text(stringResource(R.string.action_cancel))
                 }
             }
             is TransferUiState.Done -> {
-                    BigButton(stringResource(R.string.action_send_more), onSendMore)
+                val ok = s.verify == VerifyResult.Verified
+                Text(
+                    text = if (ok) "sucessly transfered" else "something went wrong",
+                    fontSize = 48.sp,
+                    color = if (ok) VerifiedGreen else WarningAmber
+                )
+                Text(stringResource(R.string.transfer_done_summary, s.fileCount, formatBytes(s.totalBytes)))
+                Text(
+                    text = stringResource(
+                        if (ok) R.string.state_verified_hint else R.string.state_mismatch_hint
+                    ),
+                    textAlign = TextAlign.Center
+                )
+                BigButton(stringResource(R.string.action_send_more), onSendMore)
             }
             is TransferUiState.Error -> {
                 BigButton(stringResource(R.string.action_retry), onRetry)
             }
+            is TransferUiState.WaitingForConfirmation -> {
+                CircularProgressIndicator()
+                TextButton(onClick = onCancel) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+            is TransferUiState.Rejected -> {
+                BigButton(stringResource(R.string.action_retry), onRetry)
+            }
+            is TransferUiState.Timeout -> {
+                BigButton(stringResource(R.string.action_retry), onRetry)
+            }
+            is TransferUiState.Cancelled -> 
+                BigButton(stringResource(R.string.action_send_more), onSendMore)
             else -> {}
         }
     }
