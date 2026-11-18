@@ -6,7 +6,7 @@
 ![C#](https://img.shields.io/badge/C%23-10.0-purple?color=purple)
 ![License](https://img.shields.io/badge/License-GNU-red)
 
-![Demo](none yet)
+![Demo](none yet) you Gotta try it yourself
 
 ## How does it work ?
 Your phone finds the PC trough mDNS discovery, connects trough a WebSocket, offers files.Pc confirms them, and requests them by batches. At the end is a SHA-256 checksum
@@ -68,8 +68,11 @@ Your phone finds the PC trough mDNS discovery, connects trough a WebSocket, offe
 ## Roadmap
     //Only latest additions
     - [x] SHA-256 check, side panel, history, czech lang support
-    - [ ] LZ4 Compression
+    - [x] LZ4 Compression
     - [ ] Liquid glass look
     - [ ] Animations, detailed instriuictions
     - [ ] USB transfer
          
+## known limitations
+
+    -i dont really know yet
